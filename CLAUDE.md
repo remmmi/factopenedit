@@ -10,10 +10,10 @@ App Electron pour telecharger et gerer les factures du SaaS OpenEdit.
 
 ## Stack
 
-- Electron + Electron Forge
-- TypeScript
-- better-sqlite3 (DB locale)
-- pdf-parse (extraction texte PDF)
+- Electron 40.6.1 + Electron Forge 7.11.1 (webpack-typescript)
+- TypeScript 5.4.5 (strict mode)
+- better-sqlite3 12.6.2 (DB locale)
+- pdf-parse 2.4.5 (extraction texte PDF)
 - HTML/CSS vanilla (pas de framework frontend)
 
 ## Architecture
@@ -42,6 +42,24 @@ https://openedit.io/invoices/{tenant_id}/{year}/{tenant_id}-{year}-{seq:04d}.pdf
 - Pas d'emojis ni caracteres Unicode decoratifs dans le code
 - Repondre en francais
 
-## Design doc
+## Etat du projet
 
-Voir `docs/plans/2026-02-28-fact-openedit-design.md`
+- [x] Workspace setup (scaffold, structure, deps, TS strict)
+- [ ] url-generator -- generateur d'URLs de factures par segments {year, from, to}
+- [ ] auth -- BrowserWindow login OpenEdit + cookies
+- [ ] downloader -- telechargement PDF via net.request
+- [ ] pdf-parser -- extraction date, montant, statut acquitte
+- [ ] db -- schema SQLite (invoices, settings, scan_ranges)
+- [ ] UI renderer -- tableau factures, panneau scan, settings
+
+Prochaine etape suggeree : url-generator (testable sans credentials)
+
+## Docs
+
+- Design : `docs/plans/2026-02-28-fact-openedit-design.md`
+- Plan setup : `docs/plans/2026-02-28-workspace-setup.md`
+
+## Premier lancement
+
+Le workspace n'a pas encore ete teste avec `npm start` (pas de display dispo lors du setup).
+Verifier au premier lancement que webpack compile et que la fenetre s'ouvre.
