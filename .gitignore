@@ -94,6 +94,7 @@ out/
 dist/
 
 # Project-specific
-data/
+data/*
+!data/.gitkeep
 *.db
 *.db-journal
