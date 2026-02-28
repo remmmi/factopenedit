@@ -22,6 +22,7 @@
         <div class="card-header">
           <h2>Factures</h2>
           <div id="filters">
+            <input type="text" id="search-input" placeholder="Rechercher..." style="width:160px" />
             <select id="filter-year">
               <option value="">Toutes les annees</option>
             </select>
@@ -42,15 +43,15 @@
           <table id="invoices-table">
             <thead>
               <tr>
-                <th>N.</th>
-                <th>Annee</th>
-                <th>Entreprise</th>
-                <th>Responsable</th>
-                <th>Ville</th>
-                <th>Date emission</th>
-                <th>Montant TTC</th>
-                <th>Acquittee</th>
-                <th>Statut</th>
+                <th data-sort="openedit_id">N. <span class="sort-icon"></span></th>
+                <th data-sort="year">Annee <span class="sort-icon"></span></th>
+                <th data-sort="client_name">Entreprise <span class="sort-icon"></span></th>
+                <th data-sort="client_contact">Responsable <span class="sort-icon"></span></th>
+                <th data-sort="client_city">Ville <span class="sort-icon"></span></th>
+                <th data-sort="issue_date">Date emission <span class="sort-icon"></span></th>
+                <th data-sort="amount_cents">Montant TTC <span class="sort-icon"></span></th>
+                <th data-sort="is_paid">Acquittee <span class="sort-icon"></span></th>
+                <th data-sort="status">Statut <span class="sort-icon"></span></th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -69,10 +70,6 @@
           <h2>Scanner</h2>
         </div>
 
-        <div class="form-row">
-          <label for="seg-year">Annee</label>
-          <input type="number" id="seg-year" value="2026" min="2020" max="2035" />
-        </div>
         <div class="form-row-inline">
           <div class="form-row">
             <label for="seg-from">Du n.</label>
@@ -85,13 +82,12 @@
         </div>
 
         <div class="form-actions">
-          <button id="btn-preview" class="btn-secondary">Apercu</button>
           <button id="btn-scan" class="btn-primary">Lancer</button>
         </div>
 
-        <div id="preview-section" hidden>
-          <p id="preview-count" class="meta-text"></p>
-          <div id="preview-list" class="url-list"></div>
+        <div class="form-row form-row--checkbox">
+          <input type="checkbox" id="slow-mode" />
+          <label for="slow-mode">Delai long (7-10s, anti-bannissement)</label>
         </div>
 
         <div id="scan-progress" hidden>
@@ -105,10 +101,24 @@
         <div id="scan-result" hidden>
           <p id="scan-result-text" class="meta-text"></p>
         </div>
+
+
       </section>
 
 
     </main>
+
+    <dialog id="scan-confirm-modal">
+      <div class="modal-header">
+        <h3>Confirmation du scan</h3>
+        <p id="modal-plan-info" class="modal-meta"></p>
+      </div>
+      <div id="modal-plan-body" class="modal-body"></div>
+      <div class="modal-footer">
+        <button id="modal-btn-cancel" class="btn-secondary">Annuler</button>
+        <button id="modal-btn-confirm" class="btn-primary">Confirmer</button>
+      </div>
+    </dialog>
 
   </body>
 </html>
