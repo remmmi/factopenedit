@@ -8,11 +8,11 @@ const BASE_URL = 'https://saisie.open-edit.io';
 // Dossier de telechargement fixe, cree automatiquement si absent
 const DOWNLOAD_DIR = path.join(app.getAppPath(), 'pdf_download');
 
-import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, insertScanRange, getScanRanges, updateClientFields } from './db';
+import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields } from './db';
 import { parsePdf } from './pdf-parser';
 import { openLoginWindow, isSessionValid } from './auth';
 import { scanSegments } from './downloader';
-import { generateUrls } from './url-generator';
+import { generateScanPlan } from './url-generator';
 import type { UrlSegment, Invoice } from '../shared/types';
 
 // Constantes Webpack injectees par Electron Forge au build
@@ -136,23 +136,20 @@ function registerIpcHandlers(): void {
 
   // -- Scan ------------------------------------------------------------------
 
-  ipcMain.handle('scan:preview', (_event, _tenantId: number, segments: UrlSegment[]) => {
-    return generateUrls(TENANT_ID, segments, BASE_URL);
+  ipcMain.handle('scan:plan', (_event, _tenantId: number, segments: UrlSegment[]) => {
+    return generateScanPlan(TENANT_ID, segments, BASE_URL);
   });
 
-  ipcMain.handle('scan:start', async (_event, _tenantId: number, segments: UrlSegment[]) => {
+  ipcMain.handle('scan:start', async (_event, _tenantId: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => {
     const downloadDir = DOWNLOAD_DIR;
-
-    // Enregistrer la plage en DB
-    for (const seg of segments) {
-      insertScanRange(db, { year: seg.year, range_start: seg.from, range_end: seg.to, status: 'scanning' });
-    }
 
     const invoices = await scanSegments({
       tenantId: TENANT_ID,
       segments,
       baseUrl: BASE_URL,
       downloadDir,
+      delayMs:    opts?.delayMs,
+      delayMaxMs: opts?.delayMaxMs,
       // Pour chaque etape, on pousse un evenement vers le renderer
       // webContents.send = push main -> renderer, sans attendre de reponse
       onProgress: (progress) => {
@@ -172,10 +169,6 @@ function registerIpcHandlers(): void {
     }
 
     return invoices.length;
-  });
-
-  ipcMain.handle('scan-ranges:get', () => {
-    return getScanRanges(db);
   });
 }
 

@@ -9,7 +9,7 @@
 // Le renderer utilise window.api.xxx() pour communiquer avec le main process.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UrlSegment, Invoice, ScanRange, ScanProgress } from '../shared/types';
+import type { UrlSegment, Invoice, ScanProgress, ScanPlanEntry } from '../shared/types';
 
 // API exposee au renderer via window.api
 const api = {
@@ -43,14 +43,15 @@ const api = {
 
   // -- Scan ------------------------------------------------------------------
 
-  previewScan: (tenantId: number, segments: UrlSegment[]): Promise<string[]> =>
-    ipcRenderer.invoke('scan:preview', tenantId, segments),
+  getScanPlan: (tenantId: number, segments: UrlSegment[]): Promise<ScanPlanEntry[]> =>
+    ipcRenderer.invoke('scan:plan', tenantId, segments),
 
-  startScan: (tenantId: number, segments: UrlSegment[]): Promise<number> =>
-    ipcRenderer.invoke('scan:start', tenantId, segments),
-
-  getScanRanges: (): Promise<(ScanRange & { id: number })[]> =>
-    ipcRenderer.invoke('scan-ranges:get'),
+  startScan: (
+    tenantId: number,
+    segments: UrlSegment[],
+    opts?: { delayMs?: number; delayMaxMs?: number }
+  ): Promise<number> =>
+    ipcRenderer.invoke('scan:start', tenantId, segments, opts),
 
   // -- Evenements push (main -> renderer) ------------------------------------
   // Le main envoie des events pendant le scan ; le renderer s'y abonne.
