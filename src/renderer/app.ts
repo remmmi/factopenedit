@@ -16,6 +16,7 @@ declare global {
       startScan: (tenantId: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => Promise<number>;
       scanDaily: (maxSeq: number, maxYear: number) => Promise<number>;
       scanInitial: (
+        tenantId: number,
         startSeq: number,
         startYear: number,
         count: number,
@@ -31,7 +32,7 @@ declare global {
 // ---------------------------------------------------------------------------
 
 let allInvoices: (Invoice & { id: number })[] = [];
-let tenantId = 79;
+let tenantId: number | null = null;
 
 let sortKey = 'openedit_id';
 let sortAsc = true;
@@ -254,23 +255,17 @@ function renderInvoices(): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse "79-2026-1110" ou "2026-1110" ou juste un nombre.
- * Retourne { year, seq } ou null si invalide.
+ * Parse "79-2026-1110" ou "2026-1110".
+ * Retourne { tenantId?, year, seq } ou null si invalide.
  */
-function parseInvoiceRef(raw: string): { year: number; seq: number } | null {
-  const parts = raw.trim().split('-').filter(Boolean);
-  if (parts.length === 3) {
-    const year = parseInt(parts[1], 10);
-    const seq  = parseInt(parts[2], 10);
-    if (!year || !seq) return null;
-    return { year, seq };
-  }
-  if (parts.length === 2) {
-    const year = parseInt(parts[0], 10);
-    const seq  = parseInt(parts[1], 10);
-    if (!year || !seq) return null;
-    return { year, seq };
-  }
+function parseInvoiceRef(raw: string): { tenantId?: number; year: number; seq: number } | null {
+  const s = raw.trim();
+  // Format "79-2026-1110"
+  const m3 = s.match(/^(\d+)-(\d{4})-(\d+)$/);
+  if (m3) return { tenantId: parseInt(m3[1], 10), year: parseInt(m3[2], 10), seq: parseInt(m3[3], 10) };
+  // Format "2026-1110"
+  const m2 = s.match(/^(\d{4})-(\d+)$/);
+  if (m2) return { year: parseInt(m2[1], 10), seq: parseInt(m2[2], 10) };
   return null;
 }
 
@@ -278,6 +273,10 @@ function computeCandidateYears(fromYear?: number): number[] {
   const years = new Set(allInvoices.map(inv => inv.year));
   const currentYear = new Date().getFullYear();
   years.add(currentYear);
+  // Toujours inclure les 2 annees precedentes pour le scan exploratoire
+  // (les seqs anciens peuvent etre dans une annee absente de la DB locale)
+  years.add(currentYear - 1);
+  years.add(currentYear - 2);
   if (fromYear) years.add(fromYear);
   // N+1 seulement si on est dans les 90 jours avant le 1er janvier
   const jan1NextMs = new Date(currentYear + 1, 0, 1).getTime();
@@ -290,7 +289,7 @@ function computeCandidateYears(fromYear?: number): number[] {
 function getSegment(): UrlSegment | null {
   const from = parseInt((document.getElementById('seg-from') as HTMLInputElement).value, 10);
   const to   = parseInt((document.getElementById('seg-to') as HTMLInputElement).value, 10);
-  if (!from || !to || from > to) return null;
+  if (isNaN(from) || isNaN(to) || from < 1 || to < from) return null;
   return { year: 0, from, to, candidateYears: computeCandidateYears() };
 }
 
@@ -347,7 +346,7 @@ function waitForModalConfirm(): Promise<boolean> {
     const btnCancel = document.getElementById('modal-btn-cancel') as HTMLButtonElement;
 
     function cleanup() {
-      modal.close();
+      if (modal.open) modal.close();
       btnOk.removeEventListener('click', onConfirm);
       btnCancel.removeEventListener('click', onCancel);
       modal.removeEventListener('cancel', onCancel);
@@ -359,13 +358,24 @@ function waitForModalConfirm(): Promise<boolean> {
     btnCancel.addEventListener('click', onCancel);
     modal.addEventListener('cancel', onCancel); // touche Echap
 
+    // Securite : si le dialog est deja ouvert (appel concurrent), le fermer d'abord
+    if (modal.open) modal.close();
     modal.showModal();
   });
 }
 
 async function startScan(): Promise<void> {
+  if (tenantId === null) {
+    alert("Faites d'abord un telechargement initial pour configurer le tenant.");
+    return;
+  }
+  const errEl = document.getElementById('scan-range-error')!;
   const seg = getSegment();
-  if (!seg) return;
+  if (!seg) {
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
 
   // Etape 1 : recuperer le plan et montrer le modal de confirmation
   const plan = await window.api.getScanPlan(tenantId, [seg]);
@@ -401,6 +411,7 @@ async function startScan(): Promise<void> {
       ? `sondage ${p.year}...`
       : `${done} / ${total} -- ${p.status}`;
     progressUrl.textContent = p.url;
+    if (p.status === 'error') console.error('[scan progress error]', p.url, p.error);
   });
 
   try {
@@ -439,11 +450,18 @@ async function handleInitialPreview(): Promise<void> {
     return;
   }
 
-  const { year, seq } = parsed;
+  const { tenantId: parsedTenant, year, seq } = parsed;
+  if (!parsedTenant) {
+    errEl.textContent = 'Format invalide — utilisez le format complet : 79-2026-1110';
+    errEl.style.display = 'block';
+    return;
+  }
+  const resolvedTenantId = parsedTenant;
+
   // Candidats : uniquement annees <= year (on descend dans le passe)
   const candidateYears = computeCandidateYears(year).filter(y => y <= year);
 
-  const plan = await window.api.getScanPlan(0, [{
+  const plan = await window.api.getScanPlan(resolvedTenantId, [{
     year: 0,
     from: Math.max(1, seq - count - 50),
     to: seq,
@@ -484,7 +502,8 @@ async function handleInitialPreview(): Promise<void> {
   });
 
   try {
-    const n = await window.api.scanInitial(seq, year, count, delayOpts);
+    const n = await window.api.scanInitial(resolvedTenantId, seq, year, count, delayOpts);
+    tenantId = resolvedTenantId; // mettre a jour le tenant global renderer
     resultText.textContent = `${n} facture${n > 1 ? 's' : ''} telechargee${n > 1 ? 's' : ''}`;
     resultSection.hidden = false;
     await loadInvoices();
@@ -543,7 +562,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Header
   document.getElementById('btn-login')!.addEventListener('click', async () => {
-    await window.api.login();
+    try {
+      await window.api.login();
+    } catch (err) {
+      console.error('[login error]', err);
+    }
     await refreshSession();
   });
 
@@ -565,14 +588,18 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Scan manuel (mode 3)
-  document.getElementById('btn-scan')!.addEventListener('click', startScan);
+  document.getElementById('btn-scan')!.addEventListener('click', () => {
+    startScan().catch(err => console.error('[scan:start]', err));
+  });
 
   // Mode 1 : initial download
   document.getElementById('btn-open-initial')!.addEventListener('click', openInitialModal);
   document.getElementById('initial-btn-cancel')!.addEventListener('click', () => {
     (document.getElementById('initial-modal') as HTMLDialogElement).close();
   });
-  document.getElementById('initial-btn-preview')!.addEventListener('click', handleInitialPreview);
+  document.getElementById('initial-btn-preview')!.addEventListener('click', () => {
+    handleInitialPreview().catch(err => console.error('[initial-preview]', err));
+  });
 
   // Delegation : boutons dans le tableau
   document.getElementById('invoices-body')!.addEventListener('click', async (e) => {
@@ -593,5 +620,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Init async
   refreshSession().catch(console.error);
+  window.api.getAllSettings().then(settings => {
+    if (settings.tenant_id) tenantId = parseInt(settings.tenant_id, 10);
+  }).catch(console.error);
   loadInvoices().then(() => performDailyCheck()).catch(console.error);
 });

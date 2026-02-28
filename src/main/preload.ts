@@ -57,12 +57,13 @@ const api = {
     ipcRenderer.invoke('scan:daily', maxSeq, maxYear),
 
   scanInitial: (
+    tenantId: number,
     startSeq: number,
     startYear: number,
     count: number,
     opts?: { delayMs?: number; delayMaxMs?: number }
   ): Promise<number> =>
-    ipcRenderer.invoke('scan:initial', startSeq, startYear, count, opts),
+    ipcRenderer.invoke('scan:initial', tenantId, startSeq, startYear, count, opts),
 
   // -- Evenements push (main -> renderer) ------------------------------------
   // Le main envoie des events pendant le scan ; le renderer s'y abonne.

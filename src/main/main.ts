@@ -3,12 +3,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 
-const TENANT_ID = 79;
 const BASE_URL = 'https://saisie.open-edit.io';
-// Dossier de telechargement fixe, cree automatiquement si absent
-const DOWNLOAD_DIR = path.join(app.getAppPath(), 'pdf_download');
 
-import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields, updateRawText } from './db';
+// tenantId lu depuis la DB apres init ; null avant le premier telechargement
+let tenantId: number | null = null;
+// Dossier de telechargement : userData pour eviter les orphelins apres mises a jour Squirrel
+let DOWNLOAD_DIR: string;
+
+import { initDb, getAllInvoices, getInvoice, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields, updateRawText } from './db';
 import { parsePdf } from './pdf-parser';
 import { openLoginWindow, isSessionValid } from './auth';
 import { scanSegments } from './downloader';
@@ -59,10 +61,72 @@ function initDatabase(): void {
   const dbPath = path.join(app.getPath('userData'), 'invoices.db');
   db = initDb(dbPath);
 
-  // (pas de settings dynamiques pour l'instant)
+  // Lire le tenant_id stocke en DB
+  const savedTenant = getSetting(db, 'tenant_id');
+  if (savedTenant) tenantId = parseInt(savedTenant, 10);
 
-  // Creer le dossier de telechargement si absent
+  // Dossier de telechargement dans userData (portable entre mises a jour)
+  DOWNLOAD_DIR = path.join(app.getPath('userData'), 'pdf_download');
   fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+}
+
+// Integre en DB les PDFs deja telecharges mais absents de la DB
+// (ex : scan interrompu avant la phase d'insertion)
+// Le nom de fichier doit etre au format "79-2026-1110.pdf"
+async function backfillFromPdfDir(dir: string): Promise<number> {
+  if (!fs.existsSync(dir)) return 0;
+
+  // Collecte recursive des .pdf
+  function collectPdfs(d: string): string[] {
+    const results: string[] = [];
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) results.push(...collectPdfs(full));
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith('.pdf')) results.push(full);
+    }
+    return results;
+  }
+
+  const pdfs = collectPdfs(dir);
+  let inserted = 0;
+
+  for (const filePath of pdfs) {
+    const name = path.basename(filePath, '.pdf');
+    // Format attendu : "{tenant}-{year}-{seq}" ex: "79-2026-1110"
+    const m = name.match(/^(\d+)-(\d{4})-(\d+)$/);
+    if (!m) continue;
+    const year = parseInt(m[2], 10);
+    const seq  = parseInt(m[3], 10);
+
+    // Deja en DB : on saute
+    if (getInvoice(db, seq, year)) continue;
+
+    try {
+      const parsed = await parsePdf(filePath);
+      insertInvoice(db, {
+        openedit_id:        seq,
+        year,
+        file_path:          filePath,
+        issue_date:         parsed.issueDate ?? undefined,
+        amount_cents:       parsed.amountCents ?? undefined,
+        is_paid:            parsed.isPaid,
+        is_avoir:           parsed.isAvoir,
+        cancels_openedit_id: parsed.cancelsOpeneditId ?? undefined,
+        cancels_year:       parsed.cancelsYear ?? undefined,
+        status:             'downloaded',
+        downloaded_at:      new Date().toISOString(),
+        raw_text:           parsed.rawText,
+        client_name:        parsed.clientName ?? undefined,
+        client_contact:     parsed.clientContact ?? undefined,
+        client_city:        parsed.clientCity ?? undefined,
+      });
+      inserted++;
+    } catch {
+      // PDF illisible ou doublon concurrent, on ignore
+    }
+  }
+
+  return inserted;
 }
 
 // Re-parse les PDFs locaux des factures sans champs client (migration one-shot)
@@ -159,15 +223,19 @@ function registerIpcHandlers(): void {
 
   // -- Scan ------------------------------------------------------------------
 
-  ipcMain.handle('scan:plan', (_event, _tenantId: number, segments: UrlSegment[]) => {
-    return generateScanPlan(TENANT_ID, segments, BASE_URL);
+  ipcMain.handle('scan:plan', (_event, tenantId_arg: number, segments: UrlSegment[]) => {
+    const tid = tenantId_arg || tenantId;
+    if (!tid) throw new Error('tenant_id non configure — faites un premier telechargement');
+    return generateScanPlan(tid, segments, BASE_URL);
   });
 
-  ipcMain.handle('scan:start', async (_event, _tenantId: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => {
+  ipcMain.handle('scan:start', async (_event, tenantId_arg: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => {
+    const tid = tenantId_arg || tenantId;
+    if (!tid) throw new Error('tenant_id non configure — faites un premier telechargement');
     const downloadDir = DOWNLOAD_DIR;
 
     const invoices = await scanSegments({
-      tenantId: TENANT_ID,
+      tenantId: tid,
       segments,
       baseUrl: BASE_URL,
       downloadDir,
@@ -195,6 +263,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('scan:daily', async (_event, maxSeq: number, maxYear: number) => {
+    if (tenantId === null) throw new Error('tenant_id non configure — faites un premier telechargement');
     const currentYear = new Date().getFullYear();
     const startYear   = Math.max(maxYear, currentYear);
     // Borne haute : 50 seq de buffer, stopAfterConsecutiveMisses coupe avant
@@ -206,10 +275,10 @@ function registerIpcHandlers(): void {
     };
 
     const invoices = await scanSegments({
-      tenantId: TENANT_ID,
+      tenantId: tenantId,
       segments: [segment],
       baseUrl:  BASE_URL,
-      downloadDir: DOWNLOAD_DIR,
+      downloadDir: DOWNLOAD_DIR!,
       stopAfterConsecutiveMisses: 3,
       onProgress: (progress) => {
         if (!mainWindow.isDestroyed()) {
@@ -226,11 +295,18 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('scan:initial',
     async (_event,
+           tenantId_arg: number,
            startSeq: number,
            startYear: number,
            count: number,
            opts?: { delayMs?: number; delayMaxMs?: number }
     ) => {
+      // Stocker en DB si nouveau ou different
+      if (tenantId !== tenantId_arg) {
+        setSetting(db, 'tenant_id', String(tenantId_arg));
+        tenantId = tenantId_arg;
+      }
+
       // candidateYears : de minYear jusqu'a startYear (ASC requis)
       const minYear = 2010;
       const candidateYears: number[] = [];
@@ -244,10 +320,10 @@ function registerIpcHandlers(): void {
       };
 
       const invoices = await scanSegments({
-        tenantId:    TENANT_ID,
+        tenantId:    tenantId,
         segments:    [segment],
         baseUrl:     BASE_URL,
-        downloadDir: DOWNLOAD_DIR,
+        downloadDir: DOWNLOAD_DIR!,
         delayMs:     opts?.delayMs,
         delayMaxMs:  opts?.delayMaxMs,
         maxDownloads: count,
@@ -275,6 +351,15 @@ app.on('ready', () => {
   registerIpcHandlers();
   createWindow();
   // Backfill silencieux apres ouverture de fenetre
+  // 1. Integre les PDFs existants non encore en DB (scan interrompu, ancien dossier)
+  const oldPdfDir = path.join(app.getAppPath(), 'pdf_download');
+  backfillFromPdfDir(oldPdfDir)
+    .then(n => { if (n > 0) console.log(`[backfill] ${n} factures integrees depuis ${oldPdfDir}`); })
+    .catch(() => {});
+  backfillFromPdfDir(DOWNLOAD_DIR)
+    .then(n => { if (n > 0) console.log(`[backfill] ${n} factures integrees depuis ${DOWNLOAD_DIR}`); })
+    .catch(() => {});
+  // 2. Migrations champs client et avoirs
   backfillClientFields().catch(() => {});
   backfillAvoirFields().catch(() => {});
 });
