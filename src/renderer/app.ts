@@ -9,6 +9,7 @@ declare global {
       checkSession: () => Promise<boolean>;
       getAllInvoices: () => Promise<(Invoice & { id: number })[]>;
       markSentToAccountant: (openeditId: number, year: number) => Promise<{ success: boolean }>;
+      unmarkSentToAccountant: (openeditId: number, year: number) => Promise<{ success: boolean }>;
       openPdf: (filePath: string) => Promise<{ success: boolean }>;
       getAllSettings: () => Promise<{ tenant_id?: string; base_url?: string; download_dir?: string }>;
       setSetting: (key: string, value: string) => Promise<{ success: boolean }>;
@@ -712,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Panier comptable
-  document.getElementById('basket-list')!.addEventListener('click', (e) => {
+  document.getElementById('basket-list')!.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
     if (target.classList.contains('basket-item__remove')) {
       const id   = parseInt(target.dataset.id!, 10);
@@ -721,6 +722,8 @@ document.addEventListener('DOMContentLoaded', () => {
         c => !(c.invoice.openedit_id === id && c.invoice.year === year)
       );
       renderBasket();
+      await window.api.unmarkSentToAccountant(id, year);
+      await loadInvoices();
     }
   });
 

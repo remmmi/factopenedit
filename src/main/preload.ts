@@ -30,6 +30,9 @@ const api = {
   markSentToAccountant: (openeditId: number, year: number): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('invoices:mark-sent', openeditId, year),
 
+  unmarkSentToAccountant: (openeditId: number, year: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('invoices:unmark-sent', openeditId, year),
+
   openPdf: (filePath: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('invoices:open-pdf', filePath),
 

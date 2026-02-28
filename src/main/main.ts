@@ -10,7 +10,7 @@ let tenantId: number | null = null;
 // Dossier de telechargement : userData pour eviter les orphelins apres mises a jour Squirrel
 let DOWNLOAD_DIR: string;
 
-import { initDb, getAllInvoices, getInvoice, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields, updateRawText } from './db';
+import { initDb, getAllInvoices, getInvoice, markSentToAccountant, updateInvoiceStatus, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields, updateRawText } from './db';
 import { parsePdf } from './pdf-parser';
 import { openLoginWindow, isSessionValid } from './auth';
 import { scanSegments } from './downloader';
@@ -196,6 +196,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('invoices:mark-sent', (_event, openeditId: number, year: number) => {
     markSentToAccountant(db, openeditId, year);
+    return { success: true };
+  });
+
+  ipcMain.handle('invoices:unmark-sent', (_event, openeditId: number, year: number) => {
+    updateInvoiceStatus(db, openeditId, year, 'downloaded');
     return { success: true };
   });
 
