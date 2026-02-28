@@ -158,11 +158,22 @@ function renderInvoices(): void {
   const paid = (document.getElementById('filter-paid') as HTMLSelectElement).value;
   const query = ((document.getElementById('search-input') as HTMLInputElement)?.value ?? '').trim();
 
+  // Set des cles (year-seq) des factures neutralisees par un avoir (calcule sur toutes les factures)
+  const allNeutralizedKeys = new Set(
+    allInvoices
+      .filter(inv => inv.is_avoir && inv.cancels_openedit_id != null)
+      .map(inv => `${inv.cancels_year}-${inv.cancels_openedit_id}`)
+  );
+
   const filteredInvoices = allInvoices.filter((inv) => {
     if (year && String(inv.year) !== year) return false;
     if (status && inv.status !== status) return false;
+    const isNeutr = allNeutralizedKeys.has(`${inv.year}-${inv.openedit_id}`);
     if (paid === '1' && !inv.is_paid && !inv.is_avoir) return false;
     if (paid === '0' && inv.is_paid && !inv.is_avoir) return false;
+    if (paid === 'avoir' && !inv.is_avoir) return false;
+    if (paid === 'neutralized' && !isNeutr) return false;
+    if (paid === 'avoir_and_neutralized' && !inv.is_avoir && !isNeutr) return false;
     if (query && !invoiceMatchesSearch(inv, query)) return false;
     return true;
   });
@@ -180,11 +191,7 @@ function renderInvoices(): void {
     return sortAsc ? res : -res;
   });
 
-  const neutralizedKeys = new Set(
-    filteredInvoices
-      .filter(inv => inv.is_avoir && inv.cancels_openedit_id != null)
-      .map(inv => `${inv.cancels_year}-${inv.cancels_openedit_id}`)
-  );
+  const neutralizedKeys = allNeutralizedKeys;
 
   // Mettre a jour les indicateurs de tri sur les en-tetes
   document.querySelectorAll('#invoices-table thead th[data-sort]').forEach((th) => {
