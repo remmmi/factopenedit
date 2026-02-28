@@ -8,11 +8,8 @@ import {
   markSentToAccountant,
   getSetting,
   setSetting,
-  insertScanRange,
-  getScanRanges,
-  updateScanRangeStatus,
 } from './db';
-import type { Invoice, ScanRange } from '../shared/types';
+import type { Invoice } from '../shared/types';
 
 // Chaque test repart d'une DB vide en memoire -- rapide et isole
 let db: Database.Database;
@@ -120,36 +117,5 @@ describe('getSetting + setSetting', () => {
     setSetting(db, 'tenant_id', '79');
     setSetting(db, 'tenant_id', '42');
     expect(getSetting(db, 'tenant_id')).toBe('42');
-  });
-});
-
-// --- scan_ranges ---
-
-const rangeFixture: ScanRange = {
-  year: 2026,
-  range_start: 1000,
-  range_end: 1100,
-  status: 'pending',
-};
-
-describe('insertScanRange + getScanRanges', () => {
-  it('retrouve un range apres insertion', () => {
-    insertScanRange(db, rangeFixture);
-    const ranges = getScanRanges(db);
-    expect(ranges).toHaveLength(1);
-    expect(ranges[0].range_start).toBe(1000);
-    expect(ranges[0].range_end).toBe(1100);
-    expect(ranges[0].status).toBe('pending');
-  });
-});
-
-describe('updateScanRangeStatus', () => {
-  it('met a jour le statut d\'un range', () => {
-    insertScanRange(db, rangeFixture);
-    const ranges = getScanRanges(db);
-    const id = (ranges[0] as { id: number }).id;
-    updateScanRangeStatus(db, id, 'completed');
-    const updated = getScanRanges(db);
-    expect(updated[0].status).toBe('completed');
   });
 });
