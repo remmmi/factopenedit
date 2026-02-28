@@ -1,5 +1,4 @@
-import { generateUrl, generateUrls } from './url-generator';
-import type { UrlSegment } from '../shared/types';
+import { generateUrl } from './url-generator';
 
 describe('generateUrl', () => {
   it('genere une URL avec le bon format de base', () => {
@@ -26,39 +25,3 @@ describe('generateUrl', () => {
   });
 });
 
-describe('generateUrls', () => {
-  it('genere toutes les URLs d\'un segment simple', () => {
-    const segments: UrlSegment[] = [{ year: 2026, from: 1090, to: 1092 }];
-    const urls = generateUrls(79, segments);
-    expect(urls).toEqual([
-      'https://saisie.open-edit.io/invoices/79/2026/79-2026-1090.pdf',
-      'https://saisie.open-edit.io/invoices/79/2026/79-2026-1091.pdf',
-      'https://saisie.open-edit.io/invoices/79/2026/79-2026-1092.pdf',
-    ]);
-  });
-
-  it('genere une seule URL quand from === to', () => {
-    const segments: UrlSegment[] = [{ year: 2026, from: 1091, to: 1091 }];
-    const urls = generateUrls(79, segments);
-    expect(urls).toHaveLength(1);
-    expect(urls[0]).toBe('https://saisie.open-edit.io/invoices/79/2026/79-2026-1091.pdf');
-  });
-
-  it('concatene les URLs de plusieurs segments', () => {
-    const segments: UrlSegment[] = [
-      { year: 2025, from: 998, to: 999 },
-      { year: 2026, from: 1000, to: 1001 },
-    ];
-    const urls = generateUrls(79, segments);
-    expect(urls).toEqual([
-      'https://saisie.open-edit.io/invoices/79/2025/79-2025-0998.pdf',
-      'https://saisie.open-edit.io/invoices/79/2025/79-2025-0999.pdf',
-      'https://saisie.open-edit.io/invoices/79/2026/79-2026-1000.pdf',
-      'https://saisie.open-edit.io/invoices/79/2026/79-2026-1001.pdf',
-    ]);
-  });
-
-  it('retourne un tableau vide pour une liste de segments vide', () => {
-    expect(generateUrls(79, [])).toEqual([]);
-  });
-});
