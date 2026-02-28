@@ -9,6 +9,9 @@ rules.push({
 });
 
 export const rendererConfig: Configuration = {
+  // source-map au lieu de eval-source-map (defaut) : requis par la CSP
+  // qui interdit 'unsafe-eval'
+  devtool: 'source-map',
   module: {
     rules,
   },

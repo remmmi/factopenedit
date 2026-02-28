@@ -218,11 +218,9 @@ async function startScan(): Promise<void> {
 // Bootstrap
 // ---------------------------------------------------------------------------
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
 
-  // Init
-  await Promise.all([refreshSession(), loadInvoices()]);
-
+  // Attacher les listeners immediatement (ne pas bloquer sur les appels async)
   // Header
   document.getElementById('btn-login')!.addEventListener('click', async () => {
     await window.api.login();
@@ -238,6 +236,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Scan
   document.getElementById('btn-preview')!.addEventListener('click', previewScan);
   document.getElementById('btn-scan')!.addEventListener('click', startScan);
+
+  // Init async (en parallele, sans bloquer les listeners)
+  refreshSession().catch(console.error);
+  loadInvoices().catch(console.error);
 
   // Delegation : boutons dans le tableau (ouvrir PDF, marquer envoye)
   document.getElementById('invoices-body')!.addEventListener('click', async (e) => {
