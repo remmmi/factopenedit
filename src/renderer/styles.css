@@ -180,6 +180,16 @@ tbody tr:hover td { background: #f8fafc; }
 .badge--dl     { background: #eff6ff; color: #2563eb; }
 .badge--sent   { background: #f0fdf4; color: #16a34a; }
 
+.badge--avoir {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.badge--neutralized {
+  background: #f97316;
+  color: #fff;
+}
+
 /* ============================================================
    Boutons
    ============================================================ */

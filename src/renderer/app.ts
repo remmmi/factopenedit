@@ -43,9 +43,10 @@ const YEAR_SWITCH_THRESHOLD = 3;
 // Helpers formatage
 // ---------------------------------------------------------------------------
 
-function formatAmount(cents: number | undefined): string {
+function formatAmount(cents: number | undefined, isAvoir = false): string {
   if (cents === undefined || cents === null) return '-';
-  return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' EUR';
+  const formatted = (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' EUR';
+  return isAvoir ? '-' + formatted : formatted;
 }
 
 function truncate(s: string | undefined, len = 28): string {
@@ -171,6 +172,12 @@ function renderInvoices(): void {
     return sortAsc ? res : -res;
   });
 
+  const neutralizedKeys = new Set(
+    allInvoices
+      .filter(inv => inv.is_avoir && inv.cancels_openedit_id != null)
+      .map(inv => `${inv.cancels_year}-${inv.cancels_openedit_id}`)
+  );
+
   // Mettre a jour les indicateurs de tri sur les en-tetes
   document.querySelectorAll('#invoices-table thead th[data-sort]').forEach((th) => {
     const el = th as HTMLElement;
@@ -186,9 +193,15 @@ function renderInvoices(): void {
   for (const inv of sorted) {
     const tr = document.createElement('tr');
 
-    const paidBadge = inv.is_paid
-      ? '<span class="badge badge--paid">Acquittee</span>'
-      : '<span class="badge badge--unpaid">Non acquittee</span>';
+    const isNeutralized = neutralizedKeys.has(`${inv.year}-${inv.openedit_id}`);
+
+    const paidBadge = inv.is_avoir
+      ? '<span class="badge badge--avoir">Avoir</span>'
+      : isNeutralized
+        ? '<span class="badge badge--neutralized">Neutralisee</span>'
+        : inv.is_paid
+          ? '<span class="badge badge--paid">Acquittee</span>'
+          : '<span class="badge badge--unpaid">Non acquittee</span>';
 
     const statusBadge = inv.status === 'sent_to_accountant'
       ? '<span class="badge badge--sent">Envoye comptable</span>'
@@ -209,7 +222,7 @@ function renderInvoices(): void {
       <td><span title="${inv.client_contact ?? ''}">${truncate(inv.client_contact)}</span></td>
       <td>${inv.client_city ?? '-'}</td>
       <td>${formatDate(inv.issue_date)}</td>
-      <td>${formatAmount(inv.amount_cents)}</td>
+      <td>${formatAmount(inv.amount_cents, inv.is_avoir)}</td>
       <td>${paidBadge}</td>
       <td>${statusBadge}</td>
       <td style="display:flex;gap:4px;flex-wrap:wrap">${pdfBtn}${sentBtn}</td>
