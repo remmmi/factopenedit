@@ -261,7 +261,7 @@ function renderInvoices(): void {
       : '';
 
     const sentBtn = inv.status !== 'sent_to_accountant'
-      ? `<button class="btn-action btn-mark-sent" data-id="${inv.openedit_id}" data-year="${inv.year}">Marquer envoye</button>`
+      ? `<button class="btn-action btn-mark-sent" data-id="${inv.openedit_id}" data-year="${inv.year}">Envoyer compta</button>`
       : '';
 
     tr.innerHTML = `
