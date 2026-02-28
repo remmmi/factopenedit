@@ -98,3 +98,5 @@ data/*
 !data/.gitkeep
 *.db
 *.db-journal
+pdf_download/
+*.pdf
