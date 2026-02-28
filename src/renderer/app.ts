@@ -36,9 +36,6 @@ let tenantId = 79;
 let sortKey = 'openedit_id';
 let sortAsc = true;
 
-// Jours de part et d'autre du 1er janvier pour activer l'exploration adjacente
-const BOUNDARY_DAYS = 90;
-
 // Doit etre identique a YEAR_SWITCH_THRESHOLD dans url-generator.ts
 const YEAR_SWITCH_THRESHOLD = 3;
 
@@ -228,35 +225,45 @@ function renderInvoices(): void {
 // Scan manuel
 // ---------------------------------------------------------------------------
 
-function computeCandidateYears(): number[] {
-  const years = new Set(allInvoices.map(inv => inv.year));
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  years.add(currentYear);
+/**
+ * Parse "79-2026-1110" ou "2026-1110" ou juste un nombre.
+ * Retourne { year, seq } ou null si invalide.
+ */
+function parseInvoiceRef(raw: string): { year: number; seq: number } | null {
+  const parts = raw.trim().split('-').filter(Boolean);
+  if (parts.length === 3) {
+    const year = parseInt(parts[1], 10);
+    const seq  = parseInt(parts[2], 10);
+    if (!year || !seq) return null;
+    return { year, seq };
+  }
+  if (parts.length === 2) {
+    const year = parseInt(parts[0], 10);
+    const seq  = parseInt(parts[1], 10);
+    if (!year || !seq) return null;
+    return { year, seq };
+  }
+  return null;
+}
 
-  // N+1 uniquement si on est dans la fenetre de BOUNDARY_DAYS avant le 1er janvier
+function computeCandidateYears(fromYear?: number): number[] {
+  const years = new Set(allInvoices.map(inv => inv.year));
+  const currentYear = new Date().getFullYear();
+  years.add(currentYear);
+  if (fromYear) years.add(fromYear);
+  // N+1 seulement si on est dans les 90 jours avant le 1er janvier
   const jan1NextMs = new Date(currentYear + 1, 0, 1).getTime();
-  const daysUntilNext = Math.floor((jan1NextMs - today.getTime()) / 86400000);
-  if (daysUntilNext <= BOUNDARY_DAYS) {
+  if (Math.floor((jan1NextMs - Date.now()) / 86400000) <= 90) {
     years.add(currentYear + 1);
   }
-
   return [...years].sort((a, b) => a - b);
 }
 
 function getSegment(): UrlSegment | null {
-  const yearRaw = (document.getElementById('seg-year') as HTMLInputElement).value.trim();
   const from = parseInt((document.getElementById('seg-from') as HTMLInputElement).value, 10);
-  const to = parseInt((document.getElementById('seg-to') as HTMLInputElement).value, 10);
+  const to   = parseInt((document.getElementById('seg-to') as HTMLInputElement).value, 10);
   if (!from || !to || from > to) return null;
-
-  if (!yearRaw) {
-    // Mode exploratoire : essayer toutes les annees candidates
-    return { year: 0, from, to, candidateYears: computeCandidateYears() };
-  }
-  const year = parseInt(yearRaw, 10);
-  if (!year) return null;
-  return { year, from, to };
+  return { year: 0, from, to, candidateYears: computeCandidateYears() };
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +347,6 @@ async function startScan(): Promise<void> {
 
   // Etape 2 : lancer le scan
   const btnScan = document.getElementById('btn-scan') as HTMLButtonElement;
-  const btnPreview = document.getElementById('btn-preview') as HTMLButtonElement;
   const progressSection = document.getElementById('scan-progress')!;
   const progressBar = document.getElementById('progress-bar')!;
   const progressText = document.getElementById('progress-text')!;
@@ -352,7 +358,6 @@ async function startScan(): Promise<void> {
   const delayOpts = slowMode ? { delayMs: 7000, delayMaxMs: 10000 } : undefined;
 
   btnScan.disabled = true;
-  btnPreview.disabled = true;
   progressSection.hidden = false;
   resultSection.hidden = true;
 
@@ -378,7 +383,85 @@ async function startScan(): Promise<void> {
   } finally {
     unsubscribe();
     btnScan.disabled = false;
-    btnPreview.disabled = false;
+    progressBar.style.width = '100%';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mode 1 : initial download
+// ---------------------------------------------------------------------------
+
+function openInitialModal(): void {
+  const modal = document.getElementById('initial-modal') as HTMLDialogElement;
+  modal.showModal();
+}
+
+async function handleInitialPreview(): Promise<void> {
+  const lastInvRaw = (document.getElementById('initial-last-invoice') as HTMLInputElement).value;
+  const countRaw   = (document.getElementById('initial-count') as HTMLInputElement).value;
+  const errEl      = document.getElementById('initial-parse-error')!;
+  errEl.style.display = 'none';
+
+  const parsed = parseInvoiceRef(lastInvRaw);
+  const count  = parseInt(countRaw, 10);
+
+  if (!parsed || !count || count < 1) {
+    errEl.textContent = 'Format invalide. Exemple : 79-2026-1110';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const { year, seq } = parsed;
+  // Candidats : uniquement annees <= year (on descend dans le passe)
+  const candidateYears = computeCandidateYears(year).filter(y => y <= year);
+
+  const plan = await window.api.getScanPlan(0, [{
+    year: 0,
+    from: Math.max(1, seq - count - 50),
+    to: seq,
+    candidateYears,
+  }]);
+
+  // Fermer le modal initial, ouvrir le modal de confirmation
+  (document.getElementById('initial-modal') as HTMLDialogElement).close();
+
+  populateScanModal(plan);
+  const confirmed = await waitForModalConfirm();
+  if (!confirmed) return;
+
+  // Lancer le scan initial via IPC scan:initial
+  const slowMode  = (document.getElementById('initial-slow-mode') as HTMLInputElement).checked;
+  const delayOpts = slowMode ? { delayMs: 7000, delayMaxMs: 10000 } : undefined;
+
+  const progressSection = document.getElementById('scan-progress')!;
+  const progressBar     = document.getElementById('progress-bar')!;
+  const progressText    = document.getElementById('progress-text')!;
+  const progressUrl     = document.getElementById('progress-url')!;
+  const resultSection   = document.getElementById('scan-result')!;
+  const resultText      = document.getElementById('scan-result-text')!;
+
+  progressSection.hidden = false;
+  resultSection.hidden   = true;
+
+  let downloaded = 0;
+  const total = count;
+
+  const unsubscribe = window.api.onScanProgress((p: ScanProgress) => {
+    if (p.status === 'saved') downloaded++;
+    if (p.status === 'checking') {
+      progressBar.style.width = `${Math.round((downloaded / total) * 100)}%`;
+      progressText.textContent = `${downloaded} / ${total} telechargees`;
+    }
+    progressUrl.textContent = p.url;
+  });
+
+  try {
+    const n = await window.api.scanInitial(seq, year, count, delayOpts);
+    resultText.textContent = `${n} facture${n > 1 ? 's' : ''} telechargee${n > 1 ? 's' : ''}`;
+    resultSection.hidden = false;
+    await loadInvoices();
+  } finally {
+    unsubscribe();
     progressBar.style.width = '100%';
   }
 }
@@ -453,9 +536,15 @@ document.addEventListener('DOMContentLoaded', () => {
     renderInvoices();
   });
 
-  // Scan manuel
-  document.getElementById('btn-preview')!.addEventListener('click', startScan);
+  // Scan manuel (mode 3)
   document.getElementById('btn-scan')!.addEventListener('click', startScan);
+
+  // Mode 1 : initial download
+  document.getElementById('btn-open-initial')!.addEventListener('click', openInitialModal);
+  document.getElementById('initial-btn-cancel')!.addEventListener('click', () => {
+    (document.getElementById('initial-modal') as HTMLDialogElement).close();
+  });
+  document.getElementById('initial-btn-preview')!.addEventListener('click', handleInitialPreview);
 
   // Delegation : boutons dans le tableau
   document.getElementById('invoices-body')!.addEventListener('click', async (e) => {
