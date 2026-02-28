@@ -415,6 +415,13 @@ thead th.sort-desc .sort-icon::after { content: ' v'; }
   padding: 6px 0;
 }
 
+.modal-body--form {
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .modal-url-item {
   padding: 2px 18px;
   font-size: 10px;

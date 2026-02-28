@@ -66,28 +66,32 @@
 
       <!-- Colonne droite : scan -->
       <section id="card-scan" class="card">
-        <div class="card-header">
-          <h2>Scanner</h2>
+        <div class="card-header"><h2>Scanner</h2></div>
+
+        <!-- Mode 1 : bouton pour ouvrir le modal de premier telechargement -->
+        <div class="form-actions">
+          <button id="btn-open-initial" class="btn-secondary">Premier telechargement</button>
         </div>
 
+        <div class="section-divider"></div>
+
+        <!-- Mode 3 : range scan from/to -->
         <div class="form-row-inline">
           <div class="form-row">
             <label for="seg-from">Du n.</label>
-            <input type="number" id="seg-from" placeholder="1001" min="1" />
+            <input type="number" id="seg-from" placeholder="0900" min="1" />
           </div>
           <div class="form-row">
             <label for="seg-to">Au n.</label>
-            <input type="number" id="seg-to" placeholder="1110" min="1" />
+            <input type="number" id="seg-to" placeholder="1090" min="1" />
           </div>
         </div>
-
-        <div class="form-actions">
-          <button id="btn-scan" class="btn-primary">Lancer</button>
-        </div>
-
         <div class="form-row form-row--checkbox">
           <input type="checkbox" id="slow-mode" />
           <label for="slow-mode">Delai long (7-10s, anti-bannissement)</label>
+        </div>
+        <div class="form-actions">
+          <button id="btn-scan" class="btn-primary">Scanner cette plage</button>
         </div>
 
         <div id="scan-progress" hidden>
@@ -97,11 +101,19 @@
           <p id="progress-text" class="meta-text"></p>
           <p id="progress-url" class="url-mono"></p>
         </div>
-
         <div id="scan-result" hidden>
           <p id="scan-result-text" class="meta-text"></p>
         </div>
 
+        <div class="section-divider"></div>
+
+        <!-- Mode 2 : daily check status -->
+        <div id="auto-scan-progress" hidden>
+          <p id="auto-progress-text" class="meta-text"></p>
+        </div>
+        <div id="auto-scan-result" hidden>
+          <p id="auto-result-text" class="meta-text msg-ok"></p>
+        </div>
 
       </section>
 
@@ -117,6 +129,33 @@
       <div class="modal-footer">
         <button id="modal-btn-cancel" class="btn-secondary">Annuler</button>
         <button id="modal-btn-confirm" class="btn-primary">Confirmer</button>
+      </div>
+    </dialog>
+
+    <!-- Modal mode 1 : premier telechargement -->
+    <dialog id="initial-modal">
+      <div class="modal-header">
+        <h3>Premier telechargement</h3>
+        <p class="modal-meta">Derniere facture connue et nombre a telecharger</p>
+      </div>
+      <div class="modal-body modal-body--form">
+        <div class="form-row">
+          <label for="initial-last-invoice">Derniere facture (ex: 79-2026-1110)</label>
+          <input type="text" id="initial-last-invoice" placeholder="79-2026-1110" />
+        </div>
+        <div class="form-row">
+          <label for="initial-count">Nombre de factures a telecharger</label>
+          <input type="number" id="initial-count" placeholder="100" min="1" max="2000" />
+        </div>
+        <div class="form-row form-row--checkbox">
+          <input type="checkbox" id="initial-slow-mode" />
+          <label for="initial-slow-mode">Delai long (7-10s, anti-bannissement)</label>
+        </div>
+        <p id="initial-parse-error" class="meta-text" style="color:var(--red);display:none"></p>
+      </div>
+      <div class="modal-footer">
+        <button id="initial-btn-cancel" class="btn-secondary">Annuler</button>
+        <button id="initial-btn-preview" class="btn-primary">Voir le plan</button>
       </div>
     </dialog>
 
