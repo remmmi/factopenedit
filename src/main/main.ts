@@ -8,7 +8,8 @@ const BASE_URL = 'https://saisie.open-edit.io';
 // Dossier de telechargement fixe, cree automatiquement si absent
 const DOWNLOAD_DIR = path.join(app.getAppPath(), 'pdf_download');
 
-import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, insertScanRange, getScanRanges } from './db';
+import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, insertScanRange, getScanRanges, updateClientFields } from './db';
+import { parsePdf } from './pdf-parser';
 import { openLoginWindow, isSessionValid } from './auth';
 import { scanSegments } from './downloader';
 import { generateUrls } from './url-generator';
@@ -62,6 +63,22 @@ function initDatabase(): void {
 
   // Creer le dossier de telechargement si absent
   fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+}
+
+// Re-parse les PDFs locaux des factures sans champs client (migration one-shot)
+async function backfillClientFields(): Promise<void> {
+  const invoices = getAllInvoices(db).filter(
+    (inv) => !inv.client_name && inv.file_path && fs.existsSync(inv.file_path)
+  );
+  for (const inv of invoices) {
+    try {
+      const parsed = await parsePdf(inv.file_path!);
+      updateClientFields(db, inv.openedit_id, inv.year,
+        parsed.clientName, parsed.clientContact, parsed.clientCity);
+    } catch {
+      // PDF illisible, on ignore
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +187,8 @@ app.on('ready', () => {
   initDatabase();
   registerIpcHandlers();
   createWindow();
+  // Backfill silencieux apres ouverture de fenetre
+  backfillClientFields().catch(() => {});
 });
 
 app.on('window-all-closed', () => {

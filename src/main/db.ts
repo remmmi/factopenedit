@@ -112,6 +112,21 @@ export function getAllInvoices(db: Database.Database): (Invoice & { id: number }
   return rows.map(rowToInvoice);
 }
 
+export function updateClientFields(
+  db: Database.Database,
+  openeditId: number,
+  year: number,
+  clientName: string | null,
+  clientContact: string | null,
+  clientCity: string | null
+): void {
+  db.prepare(`
+    UPDATE invoices
+    SET client_name = ?, client_contact = ?, client_city = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE openedit_id = ? AND year = ?
+  `).run(clientName, clientContact, clientCity, openeditId, year);
+}
+
 export function updateInvoiceStatus(
   db: Database.Database,
   openeditId: number,
