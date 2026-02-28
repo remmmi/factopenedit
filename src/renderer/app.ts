@@ -174,6 +174,14 @@ function renderInvoices(): void {
       .map(inv => `${inv.cancels_year}-${inv.cancels_openedit_id}`)
   );
 
+  // Map cle (year-seq) -> avoir qui la neutralise (pour afficher le n° dans le badge)
+  const avoirByTarget = new Map<string, Invoice & { id: number }>();
+  for (const inv of allInvoices) {
+    if (inv.is_avoir && inv.cancels_openedit_id != null) {
+      avoirByTarget.set(`${inv.cancels_year}-${inv.cancels_openedit_id}`, inv);
+    }
+  }
+
   const filteredInvoices = allInvoices.filter((inv) => {
     if (year && String(inv.year) !== year) return false;
     if (status && inv.status !== status) return false;
@@ -219,13 +227,29 @@ function renderInvoices(): void {
 
     const isNeutralized = neutralizedKeys.has(`${inv.year}-${inv.openedit_id}`);
 
-    const paidBadge = inv.is_avoir
-      ? '<span class="badge badge--avoir">Avoir</span>'
-      : isNeutralized
-        ? '<span class="badge badge--neutralized">Neutralisee</span>'
-        : inv.is_paid
-          ? '<span class="badge badge--paid">Acquittee</span>'
-          : '<span class="badge badge--unpaid">Non acquittee</span>';
+    let paidBadge: string;
+    if (inv.is_avoir) {
+      const ref = inv.cancels_openedit_id != null
+        ? ` n°${String(inv.cancels_openedit_id).padStart(4, '0')}${inv.cancels_year !== inv.year ? '/' + inv.cancels_year : ''}`
+        : '';
+      const title = inv.cancels_openedit_id != null
+        ? `Avoir de la facture ${inv.cancels_year}-${String(inv.cancels_openedit_id).padStart(4, '0')}`
+        : 'Avoir';
+      paidBadge = `<span class="badge badge--avoir" title="${title}">Avoir${ref}</span>`;
+    } else if (isNeutralized) {
+      const avoir = avoirByTarget.get(`${inv.year}-${inv.openedit_id}`);
+      const ref = avoir
+        ? ` n°${String(avoir.openedit_id).padStart(4, '0')}${avoir.year !== inv.year ? '/' + avoir.year : ''}`
+        : '';
+      const title = avoir
+        ? `Neutralisee par l'avoir ${avoir.year}-${String(avoir.openedit_id).padStart(4, '0')}`
+        : 'Neutralisee';
+      paidBadge = `<span class="badge badge--neutralized" title="${title}">Neutr.${ref}</span>`;
+    } else if (inv.is_paid) {
+      paidBadge = '<span class="badge badge--paid">Acquittee</span>';
+    } else {
+      paidBadge = '<span class="badge badge--unpaid">Non acquittee</span>';
+    }
 
     const statusBadge = inv.status === 'sent_to_accountant'
       ? '<span class="badge badge--sent">Envoye comptable</span>'
