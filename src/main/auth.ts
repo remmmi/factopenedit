@@ -39,17 +39,20 @@ export function openLoginWindow(baseUrl: string = DEFAULT_BASE_URL): Promise<Aut
     win.webContents.on('did-navigate', async (_event, url) => {
       const isOnOpenEdit = url.startsWith(baseUrl);
       const isLoginPage = url.includes('/connexion') || url.includes('/auth/');
+      console.log(`[auth] did-navigate: ${url} | onOpenEdit=${isOnOpenEdit} isLogin=${isLoginPage}`);
 
       if (isOnOpenEdit && !isLoginPage) {
         // Auth reussie -- recuperer les cookies du domaine OpenEdit
         try {
           const domain = new URL(baseUrl).hostname;
           const cookies = await session.defaultSession.cookies.get({ domain });
+          console.log(`[auth] cookies apres login (${cookies.length}):`, cookies.map(c => c.name).join(', '));
 
           const cookieHeader = cookies
             .map((c) => `${c.name}=${c.value}`)
             .join('; ');
 
+          win.removeAllListeners('closed');
           win.close();
           resolve({ cookies, cookieHeader });
         } catch (err) {
@@ -85,11 +88,12 @@ export async function isSessionValid(
     });
 
     request.on('response', (response: Electron.IncomingMessage) => {
-      // Si on est redirige vers /connexion, la session est expiree
       const location = response.headers['location'];
+      console.log(`[auth] isSessionValid: status=${response.statusCode} location=${location}`);
+      // Session valide si 200, ou si redirect vers autre chose que /connexion (ex: /factures)
       const redirectsToLogin =
         typeof location === 'string' && location.includes('/connexion');
-      resolve(response.statusCode === 200 && !redirectsToLogin);
+      resolve(response.statusCode === 200 || (typeof location === 'string' && !redirectsToLogin));
     });
 
     request.on('error', () => resolve(false));

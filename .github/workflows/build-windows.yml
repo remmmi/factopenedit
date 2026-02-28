@@ -3,6 +3,7 @@ name: Build Windows
 on:
   push:
     branches: [master]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -22,9 +23,18 @@ jobs:
       - name: Build Windows installer
         run: npm run make
 
-      - name: Upload installer
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: fact-openedit-windows
           path: out/make/squirrel.windows/x64/fact-openedit-setup.exe
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "fact-openedit ${{ github.ref_name }}"
+          files: out/make/squirrel.windows/x64/fact-openedit-setup.exe
+          draft: false
+          prerelease: false
