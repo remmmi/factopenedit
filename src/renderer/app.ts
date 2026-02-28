@@ -35,6 +35,11 @@ function formatAmount(cents: number | undefined): string {
   return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' EUR';
 }
 
+function truncate(s: string | undefined, len = 28): string {
+  if (!s) return '-';
+  return s.length > len ? s.slice(0, len) + '...' : s;
+}
+
 function formatDate(iso: string | undefined): string {
   if (!iso) return '-';
   const [y, m, d] = iso.split('-');
@@ -128,6 +133,9 @@ function renderInvoices(): void {
     tr.innerHTML = `
       <td>${inv.openedit_id}</td>
       <td>${inv.year}</td>
+      <td><span title="${inv.client_name ?? ''}">${truncate(inv.client_name)}</span></td>
+      <td><span title="${inv.client_contact ?? ''}">${truncate(inv.client_contact)}</span></td>
+      <td>${inv.client_city ?? '-'}</td>
       <td>${formatDate(inv.issue_date)}</td>
       <td>${formatAmount(inv.amount_cents)}</td>
       <td>${paidBadge}</td>

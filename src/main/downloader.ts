@@ -146,6 +146,9 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
         issue_date: parsed.issueDate ?? undefined,
         amount_cents: parsed.amountCents ?? undefined,
         is_paid: parsed.isPaid,
+        client_name: parsed.clientName ?? undefined,
+        client_contact: parsed.clientContact ?? undefined,
+        client_city: parsed.clientCity ?? undefined,
         status: 'downloaded',
         downloaded_at: new Date().toISOString(),
       };

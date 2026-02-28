@@ -28,6 +28,9 @@ export function initDb(dbPath: string): Database.Database {
       downloaded_at   TEXT NOT NULL,
       sent_at         TEXT,
       raw_text        TEXT,
+      client_name     TEXT,
+      client_contact  TEXT,
+      client_city     TEXT,
       created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(openedit_id, year)
@@ -38,6 +41,10 @@ export function initDb(dbPath: string): Database.Database {
       value TEXT NOT NULL
     );
 
+    -- Migration : ajouter les colonnes client si absentes (DB existantes)
+    -- SQLite ne supporte pas IF NOT EXISTS sur ALTER TABLE
+    -- on tente et on ignore l'erreur si les colonnes existent deja
+
     CREATE TABLE IF NOT EXISTS scan_ranges (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       year        INTEGER NOT NULL,
@@ -47,6 +54,16 @@ export function initDb(dbPath: string): Database.Database {
       created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migration pour DB existantes creees avant l'ajout de ces colonnes
+  for (const col of ['client_name', 'client_contact', 'client_city']) {
+    try {
+      db.exec(`ALTER TABLE invoices ADD COLUMN ${col} TEXT`);
+    } catch {
+      // Colonne deja presente -- on ignore
+    }
+  }
+
   return db;
 }
 
@@ -60,10 +77,10 @@ export function insertInvoice(db: Database.Database, invoice: Invoice): void {
   db.prepare(`
     INSERT INTO invoices
       (openedit_id, year, file_path, issue_date, amount_cents, is_paid,
-       status, downloaded_at, sent_at, raw_text)
+       status, downloaded_at, sent_at, raw_text, client_name, client_contact, client_city)
     VALUES
       (@openedit_id, @year, @file_path, @issue_date, @amount_cents, @is_paid,
-       @status, @downloaded_at, @sent_at, @raw_text)
+       @status, @downloaded_at, @sent_at, @raw_text, @client_name, @client_contact, @client_city)
   `).run({
     ...invoice,
     is_paid: invoice.is_paid ? 1 : 0,
@@ -73,6 +90,9 @@ export function insertInvoice(db: Database.Database, invoice: Invoice): void {
     amount_cents: invoice.amount_cents ?? null,
     sent_at: invoice.sent_at ?? null,
     raw_text: invoice.raw_text ?? null,
+    client_name: invoice.client_name ?? null,
+    client_contact: invoice.client_contact ?? null,
+    client_city: invoice.client_city ?? null,
   });
 }
 

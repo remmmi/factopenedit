@@ -9,9 +9,12 @@ const pdf = require('pdf-parse/lib/pdf-parse.js');
 import * as fs from 'fs';
 
 export interface ParsedInvoice {
-  issueDate: string | null;    // format ISO : "2026-02-26"
-  amountCents: number | null;  // en centimes : 26000 pour 260,00 EUR
+  issueDate: string | null;
+  amountCents: number | null;
   isPaid: boolean;
+  clientName: string | null;    // premiere ligne du bloc client
+  clientContact: string | null; // responsable (ligne apres le nom)
+  clientCity: string | null;    // ville (dernier code postal du bloc client)
   rawText: string;
 }
 
@@ -38,6 +41,55 @@ function parsePaid(text: string): boolean {
   return /ACQUITT[EÉ]E?/i.test(text);
 }
 
+// Extrait le bloc client : texte entre le numero de l'emetteur et "OBJET :"
+function extractClientBlock(text: string): string | null {
+  const match = text.match(/04\s*92\s*43\s*72\s*72\s*([\s\S]*?)(?=OBJET\s*:)/);
+  return match ? match[1] : null;
+}
+
+// Premiere ligne non vide du bloc client -> nom de l'entite cliente
+function parseClientName(text: string): string | null {
+  const block = extractClientBlock(text);
+  if (!block) return null;
+  const lines = block.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  return lines[0] ?? null;
+}
+
+// Responsable : ligne apres le nom de l'entite (avant adresse/email/siret)
+function parseClientContact(text: string): string | null {
+  const block = extractClientBlock(text);
+  if (!block) return null;
+  const lines = block.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+
+  // Sauter le nom (1ere ligne) + les continuations (commence par un chiffre ou 1ere se termine par '-')
+  let i = 1;
+  while (i < lines.length && (lines[i - 1].endsWith('-') || /^\d/.test(lines[i]))) {
+    i++;
+  }
+
+  // Chercher la 1ere ligne qui ressemble a un nom (pas adresse/email/siret/tel)
+  for (; i < lines.length; i++) {
+    const l = lines[i];
+    if (/\d{5}/.test(l)) break;      // code postal -> fin du bloc noms
+    if (/@/.test(l)) break;           // email
+    if (/SIRET/i.test(l)) break;      // siret
+    if (/^0[1-9](\s\d{2}){4}/.test(l)) break; // telephone
+    if (/^\d+\s+\w/.test(l)) continue; // adresse numerotee, on saute
+    return l;
+  }
+  return null;
+}
+
+// Dernier code postal + ville du bloc client -- filtre les emails
+function parseClientCity(text: string): string | null {
+  const block = extractClientBlock(text);
+  if (!block) return null;
+  const matches = [...block.matchAll(/\d{5}\s+(.+)/g)]
+    .filter((m) => !m[1].includes('@') && /^[A-ZÀ-ÿa-z]/.test(m[1].trim()));
+  if (matches.length === 0) return null;
+  return matches[matches.length - 1][1].trim();
+}
+
 export async function parsePdf(filePath: string): Promise<ParsedInvoice> {
   const buffer = fs.readFileSync(filePath);
   const data = await pdf(buffer);
@@ -47,6 +99,9 @@ export async function parsePdf(filePath: string): Promise<ParsedInvoice> {
     issueDate: parseDate(text),
     amountCents: parseAmountCents(text),
     isPaid: parsePaid(text),
+    clientName: parseClientName(text),
+    clientContact: parseClientContact(text),
+    clientCity: parseClientCity(text),
     rawText: text,
   };
 }

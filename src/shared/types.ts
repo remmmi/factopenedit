@@ -19,6 +19,9 @@ export interface Invoice {
   downloaded_at: string;
   sent_at?: string;
   raw_text?: string;
+  client_name?: string;
+  client_contact?: string;
+  client_city?: string;
 }
 
 export type ScanRangeStatus = 'pending' | 'scanning' | 'completed';
