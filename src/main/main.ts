@@ -8,7 +8,7 @@ const BASE_URL = 'https://saisie.open-edit.io';
 // Dossier de telechargement fixe, cree automatiquement si absent
 const DOWNLOAD_DIR = path.join(app.getAppPath(), 'pdf_download');
 
-import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields } from './db';
+import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields } from './db';
 import { parsePdf } from './pdf-parser';
 import { openLoginWindow, isSessionValid } from './auth';
 import { scanSegments } from './downloader';
@@ -77,6 +77,26 @@ async function backfillClientFields(): Promise<void> {
         parsed.clientName, parsed.clientContact, parsed.clientCity);
     } catch {
       // PDF illisible, on ignore
+    }
+  }
+}
+
+// Detecte les avoirs depuis le raw_text stocke en DB (sans relire les PDFs)
+// Synchrone (better-sqlite3), rapide sur 500+ factures.
+function backfillAvoirFields(): void {
+  const invoices = getAllInvoices(db).filter(inv => inv.raw_text);
+  for (const inv of invoices) {
+    const text = inv.raw_text!;
+    const isAvoir = /FACTURE\s*\(AVOIR\)/i.test(text);
+    const match = text.match(/Avoir sur facture \d+-(\d{4})-(\d+)/i);
+    const cancelsYear = match ? parseInt(match[1], 10) : null;
+    const cancelsSeq  = match ? parseInt(match[2], 10) : null;
+
+    // Mettre a jour seulement si valeur change
+    if (isAvoir !== inv.is_avoir
+        || cancelsSeq !== (inv.cancels_openedit_id ?? null)
+        || cancelsYear !== (inv.cancels_year ?? null)) {
+      updateAvoirFields(db, inv.openedit_id, inv.year, isAvoir, cancelsSeq, cancelsYear);
     }
   }
 }
@@ -253,6 +273,7 @@ app.on('ready', () => {
   createWindow();
   // Backfill silencieux apres ouverture de fenetre
   backfillClientFields().catch(() => {});
+  backfillAvoirFields(); // synchrone, regex sur raw_text en memoire
 });
 
 app.on('window-all-closed', () => {

@@ -83,17 +83,20 @@ async function downloadAndSave(
     fs.writeFileSync(filePath, buffer);
     const parsed   = await parsePdf(filePath);
     invoices.push({
-      openedit_id:     seq,
+      openedit_id:          seq,
       year,
-      file_path:       filePath,
-      issue_date:      parsed.issueDate      ?? undefined,
-      amount_cents:    parsed.amountCents    ?? undefined,
-      is_paid:         parsed.isPaid,
-      client_name:     parsed.clientName     ?? undefined,
-      client_contact:  parsed.clientContact  ?? undefined,
-      client_city:     parsed.clientCity     ?? undefined,
-      status:          'downloaded',
-      downloaded_at:   new Date().toISOString(),
+      file_path:            filePath,
+      issue_date:           parsed.issueDate           ?? undefined,
+      amount_cents:         parsed.amountCents         ?? undefined,
+      is_paid:              parsed.isPaid,
+      is_avoir:             parsed.isAvoir,
+      cancels_openedit_id:  parsed.cancelsOpeneditId  ?? undefined,
+      cancels_year:         parsed.cancelsYear         ?? undefined,
+      client_name:          parsed.clientName          ?? undefined,
+      client_contact:       parsed.clientContact       ?? undefined,
+      client_city:          parsed.clientCity          ?? undefined,
+      status:               'downloaded',
+      downloaded_at:        new Date().toISOString(),
     });
     onProgress?.({ url, seq, year, status: 'saved' });
   } catch (err) {
