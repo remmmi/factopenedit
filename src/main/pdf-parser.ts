@@ -1,5 +1,11 @@
 // Module d'extraction d'infos depuis les PDFs
-import pdf from 'pdf-parse';
+//
+// On importe directement pdf-parse/lib/pdf-parse.js et non l'index.js :
+// l'index.js de pdf-parse v1 contient un appel de test au require() qui
+// tente d'ouvrir ./test/data/05-versions-space.pdf -- ce fichier n'existe
+// pas dans l'environnement Electron et fait crasher le main process.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdf = require('pdf-parse/lib/pdf-parse.js');
 import * as fs from 'fs';
 
 export interface ParsedInvoice {
