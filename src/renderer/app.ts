@@ -14,6 +14,13 @@ declare global {
       setSetting: (key: string, value: string) => Promise<{ success: boolean }>;
       getScanPlan: (tenantId: number, segments: UrlSegment[]) => Promise<ScanPlanEntry[]>;
       startScan: (tenantId: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => Promise<number>;
+      scanDaily: (maxSeq: number, maxYear: number) => Promise<number>;
+      scanInitial: (
+        startSeq: number,
+        startYear: number,
+        count: number,
+        opts?: { delayMs?: number; delayMaxMs?: number }
+      ) => Promise<number>;
       onScanProgress: (cb: (p: ScanProgress) => void) => () => void;
     };
   }
@@ -377,6 +384,47 @@ async function startScan(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Daily check automatique (mode 2)
+// ---------------------------------------------------------------------------
+
+async function performDailyCheck(): Promise<void> {
+  if (allInvoices.length === 0) return;
+
+  const maxInvoice = allInvoices.reduce((a, b) =>
+    a.openedit_id > b.openedit_id ? a : b
+  );
+
+  const progressSection = document.getElementById('auto-scan-progress')!;
+  const progressText    = document.getElementById('auto-progress-text')!;
+  const resultSection   = document.getElementById('auto-scan-result')!;
+  const resultText      = document.getElementById('auto-result-text')!;
+
+  progressSection.hidden = false;
+  resultSection.hidden   = true;
+  progressText.textContent = 'Verification nouvelles factures...';
+
+  const unsubscribe = window.api.onScanProgress((p: ScanProgress) => {
+    if (p.status === 'checking') {
+      progressText.textContent = `daily check : ${p.seq}/${p.year}`;
+    }
+  });
+
+  try {
+    const count = await window.api.scanDaily(maxInvoice.openedit_id, maxInvoice.year);
+    if (count > 0) {
+      resultText.textContent = `${count} nouvelle${count > 1 ? 's' : ''} facture${count > 1 ? 's' : ''}`;
+      resultSection.hidden = false;
+      await loadInvoices();
+    } else {
+      progressText.textContent = 'Aucune nouvelle facture.';
+    }
+  } finally {
+    unsubscribe();
+    progressSection.hidden = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
@@ -428,5 +476,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Init async
   refreshSession().catch(console.error);
-  loadInvoices().catch(console.error);
+  loadInvoices().then(() => performDailyCheck()).catch(console.error);
 });
