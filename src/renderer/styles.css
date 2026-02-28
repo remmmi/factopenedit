@@ -473,6 +473,52 @@ thead th.sort-desc .sort-icon::after { content: ' v'; }
 }
 
 /* ============================================================
+   Accordion (bloc Scanner)
+   ============================================================ */
+.card--accordion {
+  padding: 0;
+}
+
+.card--accordion details {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none; /* supprime le triangle natif sur Firefox */
+  margin-bottom: 0;
+}
+
+/* supprime le triangle natif sur Chrome/Safari */
+.accordion-header::-webkit-details-marker { display: none; }
+
+.accordion-header:hover { background: #f8fafc; border-radius: var(--radius); }
+
+.accordion-icon::after {
+  content: '+';
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+details[open] .accordion-icon::after {
+  content: '-';
+}
+
+.accordion-body {
+  padding: 0 20px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ============================================================
    Panier comptable
    ============================================================ */
 #card-basket {
