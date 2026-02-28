@@ -39,6 +39,7 @@ declare global {
 
 let allInvoices: (Invoice & { id: number })[] = [];
 let tenantId: number | null = null;
+let sessionNewCount = 0;
 
 // Panier comptable : factures marquees pour envoi
 interface CartItem {
@@ -74,6 +75,18 @@ function formatDate(iso: string | undefined): string {
   if (!iso) return '-';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
+}
+
+// ---------------------------------------------------------------------------
+// Badge "nouvelles factures" dans le header Scanner
+// ---------------------------------------------------------------------------
+
+function addToScanBadge(n: number): void {
+  if (n <= 0) return;
+  sessionNewCount += n;
+  const badge = document.getElementById('scan-new-badge')!;
+  badge.textContent = String(sessionNewCount);
+  badge.hidden = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +471,7 @@ async function startScan(): Promise<void> {
 
   try {
     const count = await window.api.startScan(tenantId, [seg], delayOpts);
+    addToScanBadge(count);
     resultText.textContent = `${count} facture${count > 1 ? 's' : ''} telechargee${count > 1 ? 's' : ''}`;
     resultSection.hidden = false;
     await loadInvoices();
@@ -545,6 +559,7 @@ async function handleInitialPreview(): Promise<void> {
 
   try {
     const n = await window.api.scanInitial(resolvedTenantId, seq, year, count, delayOpts);
+    addToScanBadge(n);
     tenantId = resolvedTenantId; // mettre a jour le tenant global renderer
     resultText.textContent = `${n} facture${n > 1 ? 's' : ''} telechargee${n > 1 ? 's' : ''}`;
     resultSection.hidden = false;
@@ -584,6 +599,7 @@ async function performDailyCheck(): Promise<void> {
   try {
     const count = await window.api.scanDaily(maxInvoice.openedit_id, maxInvoice.year);
     if (count > 0) {
+      addToScanBadge(count);
       resultText.textContent = `${count} nouvelle${count > 1 ? 's' : ''} facture${count > 1 ? 's' : ''}`;
       resultSection.hidden = false;
       await loadInvoices();
@@ -772,6 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTransferStatus('Import en cours...');
     const result = await window.api.importZip();
     if (!result) { transferStatus.hidden = true; return; }
+    addToScanBadge(result.inserted);
     setTransferStatus(`${result.extracted} PDF extraits, ${result.inserted} nouvelle${result.inserted > 1 ? 's' : ''} en DB.`);
     await loadInvoices();
   });
@@ -779,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-backfill')!.addEventListener('click', async () => {
     setTransferStatus('Reimportation en cours...');
     const n = await window.api.backfillLocal();
+    addToScanBadge(n);
     setTransferStatus(`${n} facture${n > 1 ? 's' : ''} ajoutee${n > 1 ? 's' : ''} en DB.`);
     await loadInvoices();
   });
