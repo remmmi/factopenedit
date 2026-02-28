@@ -241,23 +241,15 @@ function registerIpcHandlers(): void {
       downloadDir,
       delayMs:    opts?.delayMs,
       delayMaxMs: opts?.delayMaxMs,
-      // Pour chaque etape, on pousse un evenement vers le renderer
-      // webContents.send = push main -> renderer, sans attendre de reponse
       onProgress: (progress) => {
         if (!mainWindow.isDestroyed()) {
           mainWindow.webContents.send('scan:progress', progress);
         }
       },
+      onSave: (invoice) => {
+        try { insertInvoice(db, invoice); } catch { /* doublon */ }
+      },
     });
-
-    // Inserer en DB toutes les factures telechargees
-    for (const invoice of invoices) {
-      try {
-        insertInvoice(db, invoice);
-      } catch {
-        // Doublon -- facture deja telechargee lors d'un scan precedent, on ignore
-      }
-    }
 
     return invoices.length;
   });
@@ -285,11 +277,11 @@ function registerIpcHandlers(): void {
           mainWindow.webContents.send('scan:progress', progress);
         }
       },
+      onSave: (invoice) => {
+        try { insertInvoice(db, invoice); } catch { /* doublon */ }
+      },
     });
 
-    for (const invoice of invoices) {
-      try { insertInvoice(db, invoice); } catch { /* doublon */ }
-    }
     return invoices.length;
   });
 
@@ -332,11 +324,11 @@ function registerIpcHandlers(): void {
             mainWindow.webContents.send('scan:progress', progress);
           }
         },
+        onSave: (invoice) => {
+          try { insertInvoice(db, invoice); } catch { /* doublon */ }
+        },
       });
 
-      for (const invoice of invoices) {
-        try { insertInvoice(db, invoice); } catch { /* doublon */ }
-      }
       return invoices.length;
     }
   );

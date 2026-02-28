@@ -35,7 +35,7 @@ let allInvoices: (Invoice & { id: number })[] = [];
 let tenantId: number | null = null;
 
 let sortKey = 'openedit_id';
-let sortAsc = true;
+let sortAsc = false;
 
 // Doit etre identique a YEAR_SWITCH_THRESHOLD dans url-generator.ts
 const YEAR_SWITCH_THRESHOLD = 3;

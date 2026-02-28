@@ -17,6 +17,7 @@ export interface ScanOptions {
   delayMs?: number;
   delayMaxMs?: number;
   onProgress?: (p: ScanProgress) => void;
+  onSave?: (invoice: Invoice) => void;  // Appele immediatement apres chaque PDF sauvegarde
   stopAfterConsecutiveMisses?: number; // Mode daily : arret apres N 404 consecutifs
   maxDownloads?: number;               // Mode initial : arret apres N factures telechargees
 }
@@ -24,8 +25,14 @@ export interface ScanOptions {
 function checkUrl(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = net.request({ method: 'HEAD', url, useSessionCookies: true });
-    req.on('response', (res) => resolve(res.statusCode === 200));
-    req.on('error', () => resolve(false));
+    req.on('response', (res) => {
+      console.log(`[HEAD] ${res.statusCode} ${url}`);
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', (err) => {
+      console.error(`[HEAD] error ${url}:`, err.message);
+      resolve(false);
+    });
     req.end();
   });
 }
@@ -34,6 +41,7 @@ function downloadPdf(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const req = net.request({ method: 'GET', url, useSessionCookies: true });
     req.on('response', (res) => {
+      console.log(`[GET] ${res.statusCode} ${url}`);
       if (res.statusCode !== 200) {
         reject(new Error(`HTTP ${res.statusCode} pour ${url}`));
         return;
@@ -43,7 +51,10 @@ function downloadPdf(url: string): Promise<Buffer> {
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
     });
-    req.on('error', reject);
+    req.on('error', (err) => {
+      console.error(`[GET] error ${url}:`, err.message);
+      reject(err);
+    });
     req.end();
   });
 }
@@ -74,6 +85,7 @@ async function downloadAndSave(
   tenantId: number,
   invoices: Invoice[],
   onProgress?: (p: ScanProgress) => void,
+  onSave?: (invoice: Invoice) => void,
 ): Promise<void> {
   onProgress?.({ url, seq, year, status: 'downloading' });
   try {
@@ -82,7 +94,7 @@ async function downloadAndSave(
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, buffer);
     const parsed   = await parsePdf(filePath);
-    invoices.push({
+    const invoice: Invoice = {
       openedit_id:          seq,
       year,
       file_path:            filePath,
@@ -98,10 +110,15 @@ async function downloadAndSave(
       client_city:          parsed.clientCity          ?? undefined,
       status:               'downloaded',
       downloaded_at:        new Date().toISOString(),
-    });
+    };
+    invoices.push(invoice);
+    onSave?.(invoice); // insertion DB immediate
+    console.log(`[save] seq=${seq} year=${year} -> ${filePath}`);
     onProgress?.({ url, seq, year, status: 'saved' });
   } catch (err) {
-    onProgress?.({ url, seq, year, status: 'error', error: err instanceof Error ? err.message : String(err) });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[error] seq=${seq} year=${year} ${url} :`, msg);
+    onProgress?.({ url, seq, year, status: 'error', error: msg });
   }
 }
 
@@ -126,6 +143,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
     baseUrl,
     delayMs = REQUEST_DELAY_MS,
     onProgress,
+    onSave,
   } = opts;
 
   const invoices: Invoice[] = [];
@@ -150,7 +168,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
         if (exists) {
           currentYear = probeYear;
           upperFound  = true;
-          await downloadAndSave(url, segment.to, probeYear, downloadDir, tenantId, invoices, onProgress);
+          await downloadAndSave(url, segment.to, probeYear, downloadDir, tenantId, invoices, onProgress, onSave);
           if (opts.maxDownloads !== undefined && invoices.length >= opts.maxDownloads) {
             return invoices;
           }
@@ -179,7 +197,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
 
         if (exists) {
           consecutiveMisses = 0;
-          await downloadAndSave(url, seq, currentYear, downloadDir, tenantId, invoices, onProgress);
+          await downloadAndSave(url, seq, currentYear, downloadDir, tenantId, invoices, onProgress, onSave);
           if (opts.maxDownloads !== undefined && invoices.length >= opts.maxDownloads) {
             break;
           }
@@ -199,7 +217,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
             await sleep(randomDelay(delayMs, opts.delayMaxMs));
 
             if (retryExists) {
-              await downloadAndSave(retryUrl, seq, currentYear, downloadDir, tenantId, invoices, onProgress);
+              await downloadAndSave(retryUrl, seq, currentYear, downloadDir, tenantId, invoices, onProgress, onSave);
               if (opts.maxDownloads !== undefined && invoices.length >= opts.maxDownloads) {
                 break;
               }
@@ -222,7 +240,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
 
         if (exists) {
           consecutiveMisses = 0;
-          await downloadAndSave(url, seq, segment.year, downloadDir, tenantId, invoices, onProgress);
+          await downloadAndSave(url, seq, segment.year, downloadDir, tenantId, invoices, onProgress, onSave);
         } else {
           consecutiveMisses++;
           onProgress?.({ url, seq, year: segment.year, status: 'skipped' });
