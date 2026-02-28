@@ -16,6 +16,9 @@ export interface Invoice {
   issue_date?: string;
   amount_cents?: number;
   is_paid: boolean;
+  is_avoir: boolean;            // true si c'est un avoir (note de credit)
+  cancels_openedit_id?: number; // seq de la facture annulee (si is_avoir)
+  cancels_year?: number;        // annee de la facture annulee (si is_avoir)
   status: InvoiceStatus;
   downloaded_at: string;
   sent_at?: string;
