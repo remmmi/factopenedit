@@ -153,8 +153,8 @@ function renderInvoices(): void {
   const filteredInvoices = allInvoices.filter((inv) => {
     if (year && String(inv.year) !== year) return false;
     if (status && inv.status !== status) return false;
-    if (paid === '1' && !inv.is_paid) return false;
-    if (paid === '0' && inv.is_paid) return false;
+    if (paid === '1' && !inv.is_paid && !inv.is_avoir) return false;
+    if (paid === '0' && inv.is_paid && !inv.is_avoir) return false;
     if (query && !invoiceMatchesSearch(inv, query)) return false;
     return true;
   });
@@ -173,7 +173,7 @@ function renderInvoices(): void {
   });
 
   const neutralizedKeys = new Set(
-    allInvoices
+    filteredInvoices
       .filter(inv => inv.is_avoir && inv.cancels_openedit_id != null)
       .map(inv => `${inv.cancels_year}-${inv.cancels_openedit_id}`)
   );
