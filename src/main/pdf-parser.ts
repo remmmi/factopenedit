@@ -12,6 +12,9 @@ export interface ParsedInvoice {
   issueDate: string | null;
   amountCents: number | null;
   isPaid: boolean;
+  isAvoir: boolean;
+  cancelsOpeneditId: number | null;
+  cancelsYear: number | null;
   clientName: string | null;    // premiere ligne du bloc client
   clientContact: string | null; // responsable (ligne apres le nom)
   clientCity: string | null;    // ville (dernier code postal du bloc client)
@@ -39,6 +42,18 @@ function parseAmountCents(text: string): number | null {
 // "FACTURE (ACQUITTEE)" ou "Facture acquittée le..."
 function parsePaid(text: string): boolean {
   return /ACQUITT[EÉ]E?/i.test(text);
+}
+
+// "FACTURE (AVOIR) ..." -> true
+export function parseIsAvoir(text: string): boolean {
+  return /FACTURE\s*\(AVOIR\)/i.test(text);
+}
+
+// "Avoir sur facture 79-2026-0907" -> { year: 2026, seq: 907 }
+export function parseCancelsRef(text: string): { year: number; seq: number } | null {
+  const match = text.match(/Avoir sur facture \d+-(\d{4})-(\d+)/i);
+  if (!match) return null;
+  return { year: parseInt(match[1], 10), seq: parseInt(match[2], 10) };
 }
 
 // Extrait le bloc client : texte entre le numero de l'emetteur et "OBJET :"
@@ -95,10 +110,14 @@ export async function parsePdf(filePath: string): Promise<ParsedInvoice> {
   const data = await pdf(buffer);
   const text = data.text;
 
+  const cancelsRef = parseCancelsRef(text);
   return {
     issueDate: parseDate(text),
     amountCents: parseAmountCents(text),
     isPaid: parsePaid(text),
+    isAvoir: parseIsAvoir(text),
+    cancelsOpeneditId: cancelsRef?.seq ?? null,
+    cancelsYear: cancelsRef?.year ?? null,
     clientName: parseClientName(text),
     clientContact: parseClientContact(text),
     clientCity: parseClientCity(text),
