@@ -45,10 +45,6 @@ function createWindow(): void {
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
-  // DevTools : ouvrir en fenetre detachee pour ne pas ecraser le layout
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
 }
 
 // ---------------------------------------------------------------------------
