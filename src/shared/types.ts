@@ -1,9 +1,10 @@
 // Types partages entre main et renderer process
 
 export interface UrlSegment {
-  year: number;
-  from: number; // numero de sequence debut (inclus)
-  to: number;   // numero de sequence fin (inclus)
+  year: number;              // 0 = mode exploratoire (utiliser candidateYears)
+  from: number;              // numero de sequence debut (inclus)
+  to: number;                // numero de sequence fin (inclus)
+  candidateYears?: number[]; // si year === 0, annees a essayer par ordre ASC
 }
 
 export type InvoiceStatus = 'downloaded' | 'sent_to_accountant';
@@ -24,19 +25,22 @@ export interface Invoice {
   client_city?: string;
 }
 
-export type ScanRangeStatus = 'pending' | 'scanning' | 'completed';
-
 export interface ScanProgress {
   url: string;
   seq: number;
   year: number;
-  status: 'checking' | 'downloading' | 'saved' | 'skipped' | 'error';
+  // checking  = tentative normale dans le scan DESC
+  // probing   = sondage multi-annees de la borne superieure (ne compte pas dans la progression)
+  // downloading / saved / skipped / error = states standard
+  status: 'checking' | 'probing' | 'downloading' | 'saved' | 'skipped' | 'error';
   error?: string;
 }
 
-export interface ScanRange {
+// Entree du plan de scan : une URL a tenter, avec contexte
+export interface ScanPlanEntry {
+  url: string;
+  seq: number;
   year: number;
-  range_start: number;
-  range_end: number;
-  status: ScanRangeStatus;
+  yearSwitch?: true; // premier seq du nouveau bloc d'annee apres switch
+  probe?: true;      // tentative de sondage de la borne superieure (plusieurs annees pour un meme seq)
 }

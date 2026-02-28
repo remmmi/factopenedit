@@ -1,6 +1,6 @@
 // Module SQLite - schema et requetes
 import Database from 'better-sqlite3';
-import type { Invoice, InvoiceStatus, ScanRange, ScanRangeStatus } from '../shared/types';
+import type { Invoice, InvoiceStatus } from '../shared/types';
 
 // better-sqlite3 stocke les booleens en 0/1 -- on convertit en lecture
 interface InvoiceRow extends Omit<Invoice, 'is_paid'> {
@@ -8,9 +8,6 @@ interface InvoiceRow extends Omit<Invoice, 'is_paid'> {
   is_paid: number;
 }
 
-interface ScanRangeRow extends ScanRange {
-  id: number;
-}
 
 export function initDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);
@@ -45,14 +42,7 @@ export function initDb(dbPath: string): Database.Database {
     -- SQLite ne supporte pas IF NOT EXISTS sur ALTER TABLE
     -- on tente et on ignore l'erreur si les colonnes existent deja
 
-    CREATE TABLE IF NOT EXISTS scan_ranges (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      year        INTEGER NOT NULL,
-      range_start INTEGER NOT NULL,
-      range_end   INTEGER NOT NULL,
-      status      TEXT NOT NULL DEFAULT 'pending',
-      created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+    DROP TABLE IF EXISTS scan_ranges;
   `);
 
   // Migration pour DB existantes creees avant l'ajout de ces colonnes
@@ -163,23 +153,3 @@ export function setSetting(db: Database.Database, key: string, value: string): v
   db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
 }
 
-// -- scan_ranges --
-
-export function insertScanRange(db: Database.Database, range: ScanRange): void {
-  db.prepare(`
-    INSERT INTO scan_ranges (year, range_start, range_end, status)
-    VALUES (@year, @range_start, @range_end, @status)
-  `).run(range);
-}
-
-export function getScanRanges(db: Database.Database): (ScanRange & { id: number })[] {
-  return db.prepare('SELECT * FROM scan_ranges ORDER BY id').all() as ScanRangeRow[];
-}
-
-export function updateScanRangeStatus(
-  db: Database.Database,
-  id: number,
-  status: ScanRangeStatus
-): void {
-  db.prepare('UPDATE scan_ranges SET status = ? WHERE id = ?').run(status, id);
-}
