@@ -226,6 +226,91 @@ function registerIpcHandlers(): void {
     return { success: true };
   });
 
+  // -- DB admin --------------------------------------------------------------
+
+  ipcMain.handle('db:reset', () => {
+    db.prepare('DELETE FROM invoices').run();
+    return { success: true };
+  });
+
+  ipcMain.handle('db:backfill', async () => {
+    const oldDir = path.join(app.getAppPath(), 'pdf_download');
+    const n1 = await backfillFromPdfDir(oldDir);
+    const n2 = await backfillFromPdfDir(DOWNLOAD_DIR);
+    return n1 + n2;
+  });
+
+  // -- Transfert entre postes ------------------------------------------------
+
+  ipcMain.handle('transfer:export-zip', async () => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: `factures-${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: 'Archive ZIP', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+
+    // Collecte recursive de tous les PDFs
+    function collectPdfs(dir: string): string[] {
+      if (!fs.existsSync(dir)) return [];
+      const results: string[] = [];
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) results.push(...collectPdfs(full));
+        else if (entry.isFile() && entry.name.toLowerCase().endsWith('.pdf')) results.push(full);
+      }
+      return results;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JSZip = require('jszip');
+    const zip = new JSZip();
+
+    // Deduplique par nom de fichier (ancien + nouveau dossier peuvent se chevaucher)
+    const seen = new Set<string>();
+    const dirs = [DOWNLOAD_DIR, path.join(app.getAppPath(), 'pdf_download')];
+    for (const dir of dirs) {
+      for (const fp of collectPdfs(dir)) {
+        const rel = path.relative(dir, fp); // ex: "2026/79-2026-1110.pdf"
+        if (!seen.has(rel)) {
+          seen.add(rel);
+          zip.file(rel, fs.readFileSync(fp));
+        }
+      }
+    }
+
+    const buffer: Buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    fs.writeFileSync(result.filePath, buffer);
+    return result.filePath;
+  });
+
+  ipcMain.handle('transfer:import-zip', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      filters: [{ name: 'Archive ZIP', extensions: ['zip'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JSZip = require('jszip');
+    const data = fs.readFileSync(result.filePaths[0]);
+    const zip = await JSZip.loadAsync(data);
+
+    let extracted = 0;
+    for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+      const entry = zipEntry as { dir: boolean; async: (type: string) => Promise<Buffer> };
+      if (entry.dir) continue;
+      if (!relativePath.toLowerCase().endsWith('.pdf')) continue;
+      const destPath = path.join(DOWNLOAD_DIR, relativePath);
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      const content = await entry.async('nodebuffer');
+      fs.writeFileSync(destPath, content);
+      extracted++;
+    }
+
+    const inserted = await backfillFromPdfDir(DOWNLOAD_DIR);
+    return { extracted, inserted };
+  });
+
   // -- Comptable -------------------------------------------------------------
 
   ipcMain.handle('accountant:download-zip', async (_event, filePaths: string[]) => {

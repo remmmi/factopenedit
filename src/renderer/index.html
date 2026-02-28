@@ -123,6 +123,22 @@
             <div id="auto-scan-result" hidden>
               <p id="auto-result-text" class="meta-text msg-ok"></p>
             </div>
+
+            <div class="section-divider"></div>
+
+            <!-- Transfert entre postes -->
+            <p class="admin-label">Transfert entre postes</p>
+            <div class="form-actions">
+              <button id="btn-export-zip" class="btn-secondary btn-small">Exporter PDF (ZIP)</button>
+              <button id="btn-import-zip" class="btn-secondary btn-small">Importer ZIP</button>
+            </div>
+
+            <p class="admin-label">Administration DB</p>
+            <div class="form-actions">
+              <button id="btn-backfill" class="btn-secondary btn-small">Reimporter dossier PDF</button>
+              <button id="btn-reset-db" class="btn-secondary btn-small btn--danger">Reinitialiser DB</button>
+            </div>
+            <p id="transfer-status" class="meta-text" hidden></p>
           </div>
         </details>
       </section>

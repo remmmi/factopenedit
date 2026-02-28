@@ -518,6 +518,17 @@ details[open] .accordion-icon::after {
   flex: 1;
 }
 
+.admin-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 10px 0 4px;
+}
+
+.btn--danger { color: var(--red); }
+
 /* ============================================================
    Panier comptable
    ============================================================ */

@@ -68,6 +68,22 @@ const api = {
   ): Promise<number> =>
     ipcRenderer.invoke('scan:initial', tenantId, startSeq, startYear, count, opts),
 
+  // -- DB admin --------------------------------------------------------------
+
+  resetDb: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('db:reset'),
+
+  backfillLocal: (): Promise<number> =>
+    ipcRenderer.invoke('db:backfill'),
+
+  // -- Transfert entre postes ------------------------------------------------
+
+  exportZip: (): Promise<string | null> =>
+    ipcRenderer.invoke('transfer:export-zip'),
+
+  importZip: (): Promise<{ extracted: number; inserted: number } | null> =>
+    ipcRenderer.invoke('transfer:import-zip'),
+
   // -- Comptable -------------------------------------------------------------
 
   downloadZip: (filePaths: string[]): Promise<string | null> =>

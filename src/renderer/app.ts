@@ -25,6 +25,10 @@ declare global {
       ) => Promise<number>;
       onScanProgress: (cb: (p: ScanProgress) => void) => () => void;
       downloadZip: (filePaths: string[]) => Promise<string | null>;
+      resetDb: () => Promise<{ success: boolean }>;
+      backfillLocal: () => Promise<number>;
+      exportZip: () => Promise<string | null>;
+      importZip: () => Promise<{ extracted: number; inserted: number } | null>;
     };
   }
 }
@@ -747,6 +751,44 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   renderBasket();
+
+  // -- Transfert / admin DB --------------------------------------------------
+
+  const transferStatus = document.getElementById('transfer-status')!;
+  function setTransferStatus(msg: string, ok = true): void {
+    transferStatus.textContent = msg;
+    transferStatus.style.color = ok ? 'var(--green)' : 'var(--red)';
+    transferStatus.hidden = false;
+  }
+
+  document.getElementById('btn-export-zip')!.addEventListener('click', async () => {
+    setTransferStatus('Export en cours...');
+    const saved = await window.api.exportZip();
+    if (saved) setTransferStatus(`ZIP sauvegarde.`);
+    else { transferStatus.hidden = true; }
+  });
+
+  document.getElementById('btn-import-zip')!.addEventListener('click', async () => {
+    setTransferStatus('Import en cours...');
+    const result = await window.api.importZip();
+    if (!result) { transferStatus.hidden = true; return; }
+    setTransferStatus(`${result.extracted} PDF extraits, ${result.inserted} nouvelle${result.inserted > 1 ? 's' : ''} en DB.`);
+    await loadInvoices();
+  });
+
+  document.getElementById('btn-backfill')!.addEventListener('click', async () => {
+    setTransferStatus('Reimportation en cours...');
+    const n = await window.api.backfillLocal();
+    setTransferStatus(`${n} facture${n > 1 ? 's' : ''} ajoutee${n > 1 ? 's' : ''} en DB.`);
+    await loadInvoices();
+  });
+
+  document.getElementById('btn-reset-db')!.addEventListener('click', async () => {
+    if (!confirm('Supprimer toutes les factures de la DB ? Les fichiers PDF ne seront pas effaces.')) return;
+    await window.api.resetDb();
+    await loadInvoices();
+    setTransferStatus('DB reinitialise.', true);
+  });
 
   // Init async
   refreshSession().catch(console.error);
