@@ -3,9 +3,10 @@ import Database from 'better-sqlite3';
 import type { Invoice, InvoiceStatus } from '../shared/types';
 
 // better-sqlite3 stocke les booleens en 0/1 -- on convertit en lecture
-interface InvoiceRow extends Omit<Invoice, 'is_paid'> {
+interface InvoiceRow extends Omit<Invoice, 'is_paid' | 'is_avoir'> {
   id: number;
   is_paid: number;
+  is_avoir: number;
 }
 
 
@@ -21,6 +22,9 @@ export function initDb(dbPath: string): Database.Database {
       issue_date      TEXT,
       amount_cents    INTEGER,
       is_paid         INTEGER NOT NULL DEFAULT 0,
+      is_avoir        INTEGER NOT NULL DEFAULT 0,
+      cancels_openedit_id INTEGER,
+      cancels_year    INTEGER,
       status          TEXT NOT NULL DEFAULT 'downloaded',
       downloaded_at   TEXT NOT NULL,
       sent_at         TEXT,
@@ -46,9 +50,17 @@ export function initDb(dbPath: string): Database.Database {
   `);
 
   // Migration pour DB existantes creees avant l'ajout de ces colonnes
-  for (const col of ['client_name', 'client_contact', 'client_city']) {
+  const migrations: Array<[string, string]> = [
+    ['client_name', 'TEXT'],
+    ['client_contact', 'TEXT'],
+    ['client_city', 'TEXT'],
+    ['is_avoir', 'INTEGER NOT NULL DEFAULT 0'],
+    ['cancels_openedit_id', 'INTEGER'],
+    ['cancels_year', 'INTEGER'],
+  ];
+  for (const [col, type] of migrations) {
     try {
-      db.exec(`ALTER TABLE invoices ADD COLUMN ${col} TEXT`);
+      db.exec(`ALTER TABLE invoices ADD COLUMN ${col} ${type}`);
     } catch {
       // Colonne deja presente -- on ignore
     }
@@ -59,21 +71,43 @@ export function initDb(dbPath: string): Database.Database {
 
 // -- invoices --
 
+function nullToUndef<T>(val: T | null): T | undefined {
+  return val === null ? undefined : val;
+}
+
 function rowToInvoice(row: InvoiceRow): Invoice & { id: number } {
-  return { ...row, is_paid: row.is_paid === 1 };
+  return {
+    ...row,
+    is_paid: row.is_paid === 1,
+    is_avoir: row.is_avoir === 1,
+    // SQLite NULL -> undefined pour les champs optionnels de l'interface
+    file_path: nullToUndef(row.file_path ?? null),
+    issue_date: nullToUndef(row.issue_date ?? null),
+    amount_cents: nullToUndef(row.amount_cents ?? null),
+    sent_at: nullToUndef(row.sent_at ?? null),
+    raw_text: nullToUndef(row.raw_text ?? null),
+    client_name: nullToUndef(row.client_name ?? null),
+    client_contact: nullToUndef(row.client_contact ?? null),
+    client_city: nullToUndef(row.client_city ?? null),
+    cancels_openedit_id: nullToUndef(row.cancels_openedit_id ?? null),
+    cancels_year: nullToUndef(row.cancels_year ?? null),
+  };
 }
 
 export function insertInvoice(db: Database.Database, invoice: Invoice): void {
   db.prepare(`
     INSERT INTO invoices
       (openedit_id, year, file_path, issue_date, amount_cents, is_paid,
+       is_avoir, cancels_openedit_id, cancels_year,
        status, downloaded_at, sent_at, raw_text, client_name, client_contact, client_city)
     VALUES
       (@openedit_id, @year, @file_path, @issue_date, @amount_cents, @is_paid,
+       @is_avoir, @cancels_openedit_id, @cancels_year,
        @status, @downloaded_at, @sent_at, @raw_text, @client_name, @client_contact, @client_city)
   `).run({
     ...invoice,
     is_paid: invoice.is_paid ? 1 : 0,
+    is_avoir: invoice.is_avoir ? 1 : 0,
     // better-sqlite3 rejette undefined -- convertir les optionnels en null
     file_path: invoice.file_path ?? null,
     issue_date: invoice.issue_date ?? null,
@@ -83,6 +117,8 @@ export function insertInvoice(db: Database.Database, invoice: Invoice): void {
     client_name: invoice.client_name ?? null,
     client_contact: invoice.client_contact ?? null,
     client_city: invoice.client_city ?? null,
+    cancels_openedit_id: invoice.cancels_openedit_id ?? null,
+    cancels_year: invoice.cancels_year ?? null,
   });
 }
 
@@ -138,6 +174,28 @@ export function markSentToAccountant(
     SET status = 'sent_to_accountant', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE openedit_id = ? AND year = ?
   `).run(openeditId, year);
+}
+
+export function updateAvoirFields(
+  db: Database.Database,
+  openeditId: number,
+  year: number,
+  isAvoir: boolean,
+  cancelsOpeneditId: number | null,
+  cancelsYear: number | null
+): void {
+  db.prepare(`
+    UPDATE invoices
+    SET is_avoir = ?, cancels_openedit_id = ?, cancels_year = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE openedit_id = ? AND year = ?
+  `).run(
+    isAvoir ? 1 : 0,
+    cancelsOpeneditId,
+    cancelsYear,
+    openeditId,
+    year
+  );
 }
 
 // -- settings --

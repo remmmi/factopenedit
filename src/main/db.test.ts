@@ -8,6 +8,7 @@ import {
   markSentToAccountant,
   getSetting,
   setSetting,
+  updateAvoirFields,
 } from './db';
 import type { Invoice } from '../shared/types';
 
@@ -23,14 +24,13 @@ afterEach(() => {
 // --- initDb ---
 
 describe('initDb', () => {
-  it('cree les trois tables invoices, settings, scan_ranges', () => {
+  it('cree les tables invoices et settings', () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
     const names = tables.map((t) => t.name);
     expect(names).toContain('invoices');
     expect(names).toContain('settings');
-    expect(names).toContain('scan_ranges');
   });
 });
 
@@ -43,6 +43,7 @@ const invoiceFixture: Invoice = {
   issue_date: '2026-01-15',
   amount_cents: 4900,
   is_paid: true,
+  is_avoir: false,
   status: 'downloaded',
   downloaded_at: '2026-02-28T10:00:00.000Z',
 };
@@ -117,5 +118,41 @@ describe('getSetting + setSetting', () => {
     setSetting(db, 'tenant_id', '79');
     setSetting(db, 'tenant_id', '42');
     expect(getSetting(db, 'tenant_id')).toBe('42');
+  });
+});
+
+describe('updateAvoirFields', () => {
+  it('marque une facture comme avoir avec reference', () => {
+    insertInvoice(db, {
+      openedit_id: 908,
+      year: 2026,
+      is_paid: false,
+      is_avoir: false,
+      status: 'downloaded',
+      downloaded_at: new Date().toISOString(),
+    });
+    updateAvoirFields(db, 908, 2026, true, 907, 2026);
+    const inv = getInvoice(db, 908, 2026)!;
+    expect(inv.is_avoir).toBe(true);
+    expect(inv.cancels_openedit_id).toBe(907);
+    expect(inv.cancels_year).toBe(2026);
+  });
+
+  it('peut remettre is_avoir a false', () => {
+    insertInvoice(db, {
+      openedit_id: 908,
+      year: 2026,
+      is_paid: false,
+      is_avoir: true,
+      cancels_openedit_id: 907,
+      cancels_year: 2026,
+      status: 'downloaded',
+      downloaded_at: new Date().toISOString(),
+    });
+    updateAvoirFields(db, 908, 2026, false, null, null);
+    const inv = getInvoice(db, 908, 2026)!;
+    expect(inv.is_avoir).toBe(false);
+    expect(inv.cancels_openedit_id).toBeUndefined();
+    expect(inv.cancels_year).toBeUndefined();
   });
 });
