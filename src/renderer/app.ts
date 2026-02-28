@@ -110,10 +110,18 @@ function fuzzyMatch(query: string, text: string, maxDist = 2): boolean {
 
 function invoiceMatchesSearch(inv: Invoice, query: string): boolean {
   if (!query) return true;
+  // Fuzzy sur les champs texte
   const textFields = [inv.client_name, inv.client_contact, inv.client_city];
   if (textFields.some(f => fuzzyMatch(query, f ?? ''))) return true;
-  return String(inv.openedit_id).includes(query)
-    || String(inv.year).includes(query);
+  // Sous-chaine sur le numero de sequence et l'annee
+  if (String(inv.openedit_id).includes(query) || String(inv.year).includes(query)) return true;
+  // Montant exact : "230" ou "230,00" ou "230.00" -> compare en centimes
+  const normalized = query.replace(',', '.').replace(/\s/g, '');
+  if (/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    const queryCents = Math.round(parseFloat(normalized) * 100);
+    if (inv.amount_cents === queryCents) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
