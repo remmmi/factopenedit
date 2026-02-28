@@ -1,6 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import Database from 'better-sqlite3';
+
+const TENANT_ID = 79;
+const BASE_URL = 'https://saisie.open-edit.io';
+// Dossier de telechargement fixe, cree automatiquement si absent
+const DOWNLOAD_DIR = path.join(app.getAppPath(), 'pdf_download');
 
 import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, insertScanRange, getScanRanges } from './db';
 import { openLoginWindow, isSessionValid } from './auth';
@@ -52,12 +58,10 @@ function initDatabase(): void {
   const dbPath = path.join(app.getPath('userData'), 'invoices.db');
   db = initDb(dbPath);
 
-  // Valeurs par defaut si premiere utilisation
-  if (!getSetting(db, 'tenant_id')) setSetting(db, 'tenant_id', '79');
-  if (!getSetting(db, 'base_url')) setSetting(db, 'base_url', 'https://saisie.open-edit.io');
-  if (!getSetting(db, 'download_dir')) {
-    setSetting(db, 'download_dir', path.join(app.getPath('documents'), 'Factures OpenEdit'));
-  }
+  // (pas de settings dynamiques pour l'instant)
+
+  // Creer le dossier de telechargement si absent
+  fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -72,14 +76,12 @@ function registerIpcHandlers(): void {
   // -- Auth ------------------------------------------------------------------
 
   ipcMain.handle('auth:login', async () => {
-    const baseUrl = getSetting(db, 'base_url') ?? 'https://saisie.open-edit.io';
-    await openLoginWindow(baseUrl);
+    await openLoginWindow(BASE_URL);
     return { success: true };
   });
 
   ipcMain.handle('auth:check-session', async () => {
-    const baseUrl = getSetting(db, 'base_url') ?? 'https://saisie.open-edit.io';
-    return isSessionValid(baseUrl);
+    return isSessionValid(BASE_URL);
   });
 
   // -- Factures --------------------------------------------------------------
@@ -117,14 +119,12 @@ function registerIpcHandlers(): void {
 
   // -- Scan ------------------------------------------------------------------
 
-  ipcMain.handle('scan:preview', (_event, tenantId: number, segments: UrlSegment[]) => {
-    const baseUrl = getSetting(db, 'base_url') ?? 'https://saisie.open-edit.io';
-    return generateUrls(tenantId, segments, baseUrl);
+  ipcMain.handle('scan:preview', (_event, _tenantId: number, segments: UrlSegment[]) => {
+    return generateUrls(TENANT_ID, segments, BASE_URL);
   });
 
-  ipcMain.handle('scan:start', async (_event, tenantId: number, segments: UrlSegment[]) => {
-    const baseUrl = getSetting(db, 'base_url') ?? 'https://saisie.open-edit.io';
-    const downloadDir = getSetting(db, 'download_dir') ?? path.join(app.getPath('documents'), 'Factures OpenEdit');
+  ipcMain.handle('scan:start', async (_event, _tenantId: number, segments: UrlSegment[]) => {
+    const downloadDir = DOWNLOAD_DIR;
 
     // Enregistrer la plage en DB
     for (const seg of segments) {
@@ -132,9 +132,9 @@ function registerIpcHandlers(): void {
     }
 
     const invoices = await scanSegments({
-      tenantId,
+      tenantId: TENANT_ID,
       segments,
-      baseUrl,
+      baseUrl: BASE_URL,
       downloadDir,
       // Pour chaque etape, on pousse un evenement vers le renderer
       // webContents.send = push main -> renderer, sans attendre de reponse

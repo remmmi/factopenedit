@@ -215,43 +215,13 @@ async function startScan(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
-
-async function loadSettings(): Promise<void> {
-  const s = await window.api.getAllSettings();
-  (document.getElementById('set-tenant-id') as HTMLInputElement).value = s.tenant_id ?? '79';
-  (document.getElementById('set-base-url') as HTMLInputElement).value = s.base_url ?? '';
-  (document.getElementById('set-download-dir') as HTMLInputElement).value = s.download_dir ?? '';
-  tenantId = parseInt(s.tenant_id ?? '79', 10);
-}
-
-async function saveSettings(): Promise<void> {
-  const tid = (document.getElementById('set-tenant-id') as HTMLInputElement).value.trim();
-  const url = (document.getElementById('set-base-url') as HTMLInputElement).value.trim();
-  const dir = (document.getElementById('set-download-dir') as HTMLInputElement).value.trim();
-
-  await Promise.all([
-    window.api.setSetting('tenant_id', tid),
-    window.api.setSetting('base_url', url),
-    window.api.setSetting('download_dir', dir),
-  ]);
-
-  tenantId = parseInt(tid, 10);
-
-  const saved = document.getElementById('settings-saved')!;
-  saved.hidden = false;
-  setTimeout(() => { saved.hidden = true; }, 2000);
-}
-
-// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
 
   // Init
-  await Promise.all([refreshSession(), loadInvoices(), loadSettings()]);
+  await Promise.all([refreshSession(), loadInvoices()]);
 
   // Header
   document.getElementById('btn-login')!.addEventListener('click', async () => {
@@ -268,9 +238,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Scan
   document.getElementById('btn-preview')!.addEventListener('click', previewScan);
   document.getElementById('btn-scan')!.addEventListener('click', startScan);
-
-  // Settings
-  document.getElementById('btn-save-settings')!.addEventListener('click', saveSettings);
 
   // Delegation : boutons dans le tableau (ouvrir PDF, marquer envoye)
   document.getElementById('invoices-body')!.addEventListener('click', async (e) => {
