@@ -155,6 +155,8 @@ tbody td {
 
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: #f8fafc; }
+tbody tr.row--zipped td { background: #f0fdf4; }
+tbody tr.row--zipped:hover td { background: #dcfce7; }
 
 .table-footer {
   padding-top: 8px;

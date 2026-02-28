@@ -42,6 +42,8 @@ interface CartItem {
   zipped: boolean;
 }
 let cartItems: CartItem[] = [];
+// Cles "year-seq" des factures dont le ZIP a ete telecharge (fond vert dans le tableau)
+const zippedKeys = new Set<string>();
 
 let sortKey = 'openedit_id';
 let sortAsc = false;
@@ -225,6 +227,9 @@ function renderInvoices(): void {
 
   for (const inv of sorted) {
     const tr = document.createElement('tr');
+    if (zippedKeys.has(`${inv.year}-${inv.openedit_id}`)) {
+      tr.classList.add('row--zipped');
+    }
 
     const isNeutralized = neutralizedKeys.has(`${inv.year}-${inv.openedit_id}`);
 
@@ -639,9 +644,14 @@ async function downloadBasketZip(): Promise<void> {
   const savedPath = await window.api.downloadZip(filePaths);
   if (!savedPath) return; // annule par l'utilisateur
 
-  // Marquer tous comme zippes
-  cartItems = cartItems.map(c => ({ ...c, zipped: true }));
+  // Marquer les factures comme zippees dans le tableau principal
+  for (const item of cartItems) {
+    zippedKeys.add(`${item.invoice.year}-${item.invoice.openedit_id}`);
+  }
+  // Vider le panier
+  cartItems = [];
   renderBasket();
+  renderInvoices();
 }
 
 // ---------------------------------------------------------------------------
