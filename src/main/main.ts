@@ -170,6 +170,77 @@ function registerIpcHandlers(): void {
 
     return invoices.length;
   });
+
+  ipcMain.handle('scan:daily', async (_event, maxSeq: number, maxYear: number) => {
+    const currentYear = new Date().getFullYear();
+    const startYear   = Math.max(maxYear, currentYear);
+    // Borne haute : 50 seq de buffer, stopAfterConsecutiveMisses coupe avant
+    const TO_BUFFER = 50;
+    const segment: UrlSegment = {
+      year:  startYear,
+      from:  maxSeq + 1,
+      to:    maxSeq + TO_BUFFER,
+    };
+
+    const invoices = await scanSegments({
+      tenantId: TENANT_ID,
+      segments: [segment],
+      baseUrl:  BASE_URL,
+      downloadDir: DOWNLOAD_DIR,
+      stopAfterConsecutiveMisses: 3,
+      onProgress: (progress) => {
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('scan:progress', progress);
+        }
+      },
+    });
+
+    for (const invoice of invoices) {
+      try { insertInvoice(db, invoice); } catch { /* doublon */ }
+    }
+    return invoices.length;
+  });
+
+  ipcMain.handle('scan:initial',
+    async (_event,
+           startSeq: number,
+           startYear: number,
+           count: number,
+           opts?: { delayMs?: number; delayMaxMs?: number }
+    ) => {
+      // candidateYears : de minYear jusqu'a startYear (ASC requis)
+      const minYear = 2010;
+      const candidateYears: number[] = [];
+      for (let y = minYear; y <= startYear; y++) candidateYears.push(y);
+
+      const segment: UrlSegment = {
+        year:           0,
+        from:           Math.max(1, startSeq - count - 50), // marge
+        to:             startSeq,
+        candidateYears,
+      };
+
+      const invoices = await scanSegments({
+        tenantId:    TENANT_ID,
+        segments:    [segment],
+        baseUrl:     BASE_URL,
+        downloadDir: DOWNLOAD_DIR,
+        delayMs:     opts?.delayMs,
+        delayMaxMs:  opts?.delayMaxMs,
+        maxDownloads: count,
+        onProgress: (progress) => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan:progress', progress);
+          }
+        },
+      });
+
+      for (const invoice of invoices) {
+        try { insertInvoice(db, invoice); } catch { /* doublon */ }
+      }
+      return invoices.length;
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
