@@ -52,6 +52,7 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "electron-squirrel-startup": "^1.0.1",
+    "jszip": "^3.10.1",
     "pdf-parse": "^1.1.1"
   }
 }

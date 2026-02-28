@@ -74,7 +74,7 @@ body {
 #grid {
   display: grid;
   grid-template-columns: 1fr 300px;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr;
   gap: 14px;
   padding: 14px;
   flex: 1;
@@ -468,6 +468,76 @@ thead th.sort-desc .sort-icon::after { content: ' v'; }
   border-top: 1px solid #dbeafe;
   border-bottom: 1px solid #dbeafe;
   margin: 4px 0;
+}
+
+/* ============================================================
+   Panier comptable
+   ============================================================ */
+#card-basket {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.basket-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.basket-empty {
+  padding: 24px 0;
+  font-size: 11px;
+}
+
+.basket-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  gap: 6px;
+}
+
+.basket-item--zipped {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.basket-item__label {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  color: var(--text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basket-item__remove {
+  background: transparent;
+  color: var(--muted);
+  padding: 1px 5px;
+  font-size: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.basket-item__remove:hover { background: #fee2e2; color: var(--red); }
+
+.basket-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 6px;
 }
 
 .modal-footer {

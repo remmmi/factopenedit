@@ -23,6 +23,7 @@ declare global {
         opts?: { delayMs?: number; delayMaxMs?: number }
       ) => Promise<number>;
       onScanProgress: (cb: (p: ScanProgress) => void) => () => void;
+      downloadZip: (filePaths: string[]) => Promise<string | null>;
     };
   }
 }
@@ -33,6 +34,13 @@ declare global {
 
 let allInvoices: (Invoice & { id: number })[] = [];
 let tenantId: number | null = null;
+
+// Panier comptable : factures marquees pour envoi
+interface CartItem {
+  invoice: Invoice & { id: number };
+  zipped: boolean;
+}
+let cartItems: CartItem[] = [];
 
 let sortKey = 'openedit_id';
 let sortAsc = false;
@@ -555,6 +563,63 @@ async function performDailyCheck(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Panier comptable
+// ---------------------------------------------------------------------------
+
+function renderBasket(): void {
+  const list    = document.getElementById('basket-list')!;
+  const empty   = document.getElementById('basket-empty')!;
+  const count   = document.getElementById('basket-count')!;
+  const btnZip  = document.getElementById('btn-basket-zip') as HTMLButtonElement;
+  const btnClear = document.getElementById('btn-basket-clear') as HTMLButtonElement;
+
+  empty.hidden = cartItems.length > 0;
+  list.innerHTML = '';
+
+  for (const item of cartItems) {
+    const inv = item.invoice;
+    const label = `${String(inv.openedit_id).padStart(4, '0')} / ${inv.year}${inv.client_name ? ' - ' + inv.client_name.slice(0, 18) : ''}`;
+    const div = document.createElement('div');
+    div.className = 'basket-item' + (item.zipped ? ' basket-item--zipped' : '');
+    div.innerHTML = `
+      <span class="basket-item__label" title="${inv.client_name ?? ''}">${label}</span>
+      <button class="btn-action basket-item__remove" data-id="${inv.openedit_id}" data-year="${inv.year}" title="Retirer">x</button>
+    `;
+    list.appendChild(div);
+  }
+
+  const n = cartItems.length;
+  count.textContent = n > 0 ? `${n} facture${n > 1 ? 's' : ''}` : '';
+  btnZip.disabled   = n === 0;
+  btnClear.disabled = n === 0;
+}
+
+function addToBasket(inv: Invoice & { id: number }): void {
+  const exists = cartItems.some(
+    c => c.invoice.openedit_id === inv.openedit_id && c.invoice.year === inv.year
+  );
+  if (!exists) {
+    cartItems.push({ invoice: inv, zipped: false });
+    renderBasket();
+  }
+}
+
+async function downloadBasketZip(): Promise<void> {
+  const filePaths = cartItems
+    .map(c => c.invoice.file_path)
+    .filter((p): p is string => !!p);
+
+  if (filePaths.length === 0) return;
+
+  const savedPath = await window.api.downloadZip(filePaths);
+  if (!savedPath) return; // annule par l'utilisateur
+
+  // Marquer tous comme zippes
+  cartItems = cartItems.map(c => ({ ...c, zipped: true }));
+  renderBasket();
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
@@ -611,12 +676,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (target.classList.contains('btn-mark-sent')) {
-      const id = parseInt(target.dataset.id!, 10);
+      const id   = parseInt(target.dataset.id!, 10);
       const year = parseInt(target.dataset.year!, 10);
       await window.api.markSentToAccountant(id, year);
+      // Ajouter au panier comptable
+      const inv = allInvoices.find(i => i.openedit_id === id && i.year === year);
+      if (inv) addToBasket(inv);
       await loadInvoices();
     }
+
   });
+
+  // Panier comptable
+  document.getElementById('basket-list')!.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('basket-item__remove')) {
+      const id   = parseInt(target.dataset.id!, 10);
+      const year = parseInt(target.dataset.year!, 10);
+      cartItems = cartItems.filter(
+        c => !(c.invoice.openedit_id === id && c.invoice.year === year)
+      );
+      renderBasket();
+    }
+  });
+
+  document.getElementById('btn-basket-zip')!.addEventListener('click', () => {
+    downloadBasketZip().catch(err => console.error('[basket-zip]', err));
+  });
+
+  document.getElementById('btn-basket-clear')!.addEventListener('click', () => {
+    cartItems = [];
+    renderBasket();
+  });
+
+  renderBasket();
 
   // Init async
   refreshSession().catch(console.error);

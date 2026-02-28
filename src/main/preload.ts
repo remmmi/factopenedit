@@ -65,6 +65,11 @@ const api = {
   ): Promise<number> =>
     ipcRenderer.invoke('scan:initial', tenantId, startSeq, startYear, count, opts),
 
+  // -- Comptable -------------------------------------------------------------
+
+  downloadZip: (filePaths: string[]): Promise<string | null> =>
+    ipcRenderer.invoke('accountant:download-zip', filePaths),
+
   // -- Evenements push (main -> renderer) ------------------------------------
   // Le main envoie des events pendant le scan ; le renderer s'y abonne.
 

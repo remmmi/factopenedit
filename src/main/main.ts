@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
@@ -219,6 +219,28 @@ function registerIpcHandlers(): void {
   ipcMain.handle('settings:set', (_event, key: string, value: string) => {
     setSetting(db, key, value);
     return { success: true };
+  });
+
+  // -- Comptable -------------------------------------------------------------
+
+  ipcMain.handle('accountant:download-zip', async (_event, filePaths: string[]) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: `factures-comptable-${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: 'Archive ZIP', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JSZip = require('jszip');
+    const zip = new JSZip();
+    for (const fp of filePaths) {
+      if (fs.existsSync(fp)) {
+        zip.file(path.basename(fp), fs.readFileSync(fp));
+      }
+    }
+    const buffer: Buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    fs.writeFileSync(result.filePath, buffer);
+    return result.filePath;
   });
 
   // -- Scan ------------------------------------------------------------------
