@@ -198,6 +198,17 @@ export function updateAvoirFields(
   );
 }
 
+export function updateRawText(
+  db: Database.Database,
+  openeditId: number,
+  year: number,
+  rawText: string
+): void {
+  db.prepare(
+    'UPDATE invoices SET raw_text = ?, updated_at = CURRENT_TIMESTAMP WHERE openedit_id = ? AND year = ?'
+  ).run(rawText, openeditId, year);
+}
+
 // -- settings --
 
 export function getSetting(db: Database.Database, key: string): string | undefined {

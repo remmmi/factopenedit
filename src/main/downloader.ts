@@ -92,6 +92,7 @@ async function downloadAndSave(
       is_avoir:             parsed.isAvoir,
       cancels_openedit_id:  parsed.cancelsOpeneditId  ?? undefined,
       cancels_year:         parsed.cancelsYear         ?? undefined,
+      raw_text:             parsed.rawText,
       client_name:          parsed.clientName          ?? undefined,
       client_contact:       parsed.clientContact       ?? undefined,
       client_city:          parsed.clientCity          ?? undefined,

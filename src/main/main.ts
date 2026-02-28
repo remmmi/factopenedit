@@ -8,7 +8,7 @@ const BASE_URL = 'https://saisie.open-edit.io';
 // Dossier de telechargement fixe, cree automatiquement si absent
 const DOWNLOAD_DIR = path.join(app.getAppPath(), 'pdf_download');
 
-import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields } from './db';
+import { initDb, getAllInvoices, markSentToAccountant, getSetting, setSetting, insertInvoice, updateClientFields, updateAvoirFields, updateRawText } from './db';
 import { parsePdf } from './pdf-parser';
 import { openLoginWindow, isSessionValid } from './auth';
 import { scanSegments } from './downloader';
@@ -81,22 +81,25 @@ async function backfillClientFields(): Promise<void> {
   }
 }
 
-// Detecte les avoirs depuis le raw_text stocke en DB (sans relire les PDFs)
-// Synchrone (better-sqlite3), rapide sur 500+ factures.
-function backfillAvoirFields(): void {
-  const invoices = getAllInvoices(db).filter(inv => inv.raw_text);
+// Re-parse les PDFs locaux pour detecter les avoirs non encore analyses.
+// Cible : factures avec file_path valide et raw_text NULL (pas encore parse).
+async function backfillAvoirFields(): Promise<void> {
+  const invoices = getAllInvoices(db).filter(
+    (inv) => !inv.raw_text && inv.file_path && fs.existsSync(inv.file_path)
+  );
   for (const inv of invoices) {
-    const text = inv.raw_text!;
-    const isAvoir = /FACTURE\s*\(AVOIR\)/i.test(text);
-    const match = text.match(/Avoir sur facture \d+-(\d{4})-(\d+)/i);
-    const cancelsYear = match ? parseInt(match[1], 10) : null;
-    const cancelsSeq  = match ? parseInt(match[2], 10) : null;
-
-    // Mettre a jour seulement si valeur change
-    if (isAvoir !== inv.is_avoir
-        || cancelsSeq !== (inv.cancels_openedit_id ?? null)
-        || cancelsYear !== (inv.cancels_year ?? null)) {
-      updateAvoirFields(db, inv.openedit_id, inv.year, isAvoir, cancelsSeq, cancelsYear);
+    try {
+      const parsed = await parsePdf(inv.file_path!);
+      updateAvoirFields(
+        db, inv.openedit_id, inv.year,
+        parsed.isAvoir,
+        parsed.cancelsOpeneditId,
+        parsed.cancelsYear,
+      );
+      // Stocker raw_text pour eviter de re-parser au prochain demarrage
+      updateRawText(db, inv.openedit_id, inv.year, parsed.rawText);
+    } catch {
+      // PDF illisible, on ignore
     }
   }
 }
@@ -273,7 +276,7 @@ app.on('ready', () => {
   createWindow();
   // Backfill silencieux apres ouverture de fenetre
   backfillClientFields().catch(() => {});
-  backfillAvoirFields(); // synchrone, regex sur raw_text en memoire
+  backfillAvoirFields().catch(() => {});
 });
 
 app.on('window-all-closed', () => {
