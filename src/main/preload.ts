@@ -9,8 +9,7 @@
 // Le renderer utilise window.api.xxx() pour communiquer avec le main process.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UrlSegment, Invoice, ScanRange } from '../shared/types';
-import type { ScanProgress } from './downloader';
+import type { UrlSegment, Invoice, ScanRange, ScanProgress } from '../shared/types';
 
 // API exposee au renderer via window.api
 const api = {

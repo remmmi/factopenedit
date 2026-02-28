@@ -1,12 +1,135 @@
 <!doctype html>
-<html>
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <title>Hello World!</title>
-
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';" />
+    <title>fact_openedit</title>
   </head>
   <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
+
+    <header id="header">
+      <h1>fact_openedit</h1>
+      <div id="session-status">
+        <span id="session-label">Non connecte</span>
+        <button id="btn-login" class="btn-primary">Se connecter</button>
+      </div>
+    </header>
+
+    <main id="grid">
+
+      <!-- Colonne gauche : tableau des factures -->
+      <section id="card-invoices" class="card card--large">
+        <div class="card-header">
+          <h2>Factures</h2>
+          <div id="filters">
+            <select id="filter-year">
+              <option value="">Toutes les annees</option>
+            </select>
+            <select id="filter-status">
+              <option value="">Tous les statuts</option>
+              <option value="downloaded">Telechargees</option>
+              <option value="sent_to_accountant">Envoyees comptable</option>
+            </select>
+            <select id="filter-paid">
+              <option value="">Acquittement</option>
+              <option value="1">Acquittees</option>
+              <option value="0">Non acquittees</option>
+            </select>
+            <button id="btn-refresh" class="btn-secondary btn-small">Actualiser</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table id="invoices-table">
+            <thead>
+              <tr>
+                <th>N.</th>
+                <th>Annee</th>
+                <th>Date emission</th>
+                <th>Montant TTC</th>
+                <th>Acquittee</th>
+                <th>Statut</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="invoices-body"></tbody>
+          </table>
+          <p id="invoices-empty" class="empty-state" hidden>
+            Aucune facture. Lancez un scan pour commencer.
+          </p>
+        </div>
+        <div id="invoices-count" class="table-footer"></div>
+      </section>
+
+      <!-- Colonne droite : scan -->
+      <section id="card-scan" class="card">
+        <div class="card-header">
+          <h2>Scanner</h2>
+        </div>
+
+        <div class="form-row">
+          <label for="seg-year">Annee</label>
+          <input type="number" id="seg-year" value="2026" min="2020" max="2035" />
+        </div>
+        <div class="form-row-inline">
+          <div class="form-row">
+            <label for="seg-from">Du n.</label>
+            <input type="number" id="seg-from" placeholder="1001" min="1" />
+          </div>
+          <div class="form-row">
+            <label for="seg-to">Au n.</label>
+            <input type="number" id="seg-to" placeholder="1110" min="1" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button id="btn-preview" class="btn-secondary">Apercu</button>
+          <button id="btn-scan" class="btn-primary">Lancer</button>
+        </div>
+
+        <div id="preview-section" hidden>
+          <p id="preview-count" class="meta-text"></p>
+          <div id="preview-list" class="url-list"></div>
+        </div>
+
+        <div id="scan-progress" hidden>
+          <div class="progress-bar-wrap">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <p id="progress-text" class="meta-text"></p>
+          <p id="progress-url" class="url-mono"></p>
+        </div>
+
+        <div id="scan-result" hidden>
+          <p id="scan-result-text" class="meta-text"></p>
+        </div>
+      </section>
+
+      <!-- Colonne droite : settings -->
+      <section id="card-settings" class="card">
+        <div class="card-header">
+          <h2>Parametres</h2>
+        </div>
+
+        <div class="form-row">
+          <label for="set-tenant-id">Tenant ID</label>
+          <input type="text" id="set-tenant-id" />
+        </div>
+        <div class="form-row">
+          <label for="set-base-url">URL de base</label>
+          <input type="text" id="set-base-url" />
+        </div>
+        <div class="form-row">
+          <label for="set-download-dir">Dossier de telechargement</label>
+          <input type="text" id="set-download-dir" />
+        </div>
+
+        <div class="form-actions">
+          <button id="btn-save-settings" class="btn-primary">Enregistrer</button>
+          <span id="settings-saved" class="msg-ok" hidden>Enregistre.</span>
+        </div>
+      </section>
+
+    </main>
+
   </body>
 </html>

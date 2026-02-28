@@ -4,18 +4,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { generateUrls } from './url-generator';
 import { parsePdf } from './pdf-parser';
-import type { UrlSegment, Invoice } from '../shared/types';
+import type { UrlSegment, Invoice, ScanProgress } from '../shared/types';
 
 // Delai entre deux requetes pour ne pas se faire rate-limiter (ms)
 const REQUEST_DELAY_MS = 300;
-
-export interface ScanProgress {
-  url: string;
-  seq: number;
-  year: number;
-  status: 'checking' | 'downloading' | 'saved' | 'skipped' | 'error';
-  error?: string;
-}
 
 export interface ScanOptions {
   downloadDir: string;       // dossier racine ou sauvegarder les PDFs

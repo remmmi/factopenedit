@@ -23,6 +23,14 @@ export interface Invoice {
 
 export type ScanRangeStatus = 'pending' | 'scanning' | 'completed';
 
+export interface ScanProgress {
+  url: string;
+  seq: number;
+  year: number;
+  status: 'checking' | 'downloading' | 'saved' | 'skipped' | 'error';
+  error?: string;
+}
+
 export interface ScanRange {
   year: number;
   range_start: number;
