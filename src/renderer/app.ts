@@ -726,7 +726,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-status')!.addEventListener('change', applyFilters);
   document.getElementById('filter-paid')!.addEventListener('change', applyFilters);
   document.getElementById('search-input')!.addEventListener('input', applyFilters);
-  document.getElementById('btn-refresh')!.addEventListener('click', loadInvoices);
+  document.getElementById('btn-refresh')!.addEventListener('click', () => {
+    selectedKeys.clear();
+    lastClickedKey = null;
+    loadInvoices();
+  });
 
   // Tri des colonnes (delegation sur thead)
   document.querySelector('#invoices-table thead')!.addEventListener('click', (e) => {
