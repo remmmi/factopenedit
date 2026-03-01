@@ -731,25 +731,52 @@ document.addEventListener('DOMContentLoaded', () => {
     handleInitialPreview().catch(err => console.error('[initial-preview]', err));
   });
 
-  // Delegation : boutons dans le tableau
+  // Delegation : boutons dans le tableau + selection de lignes
   document.getElementById('invoices-body')!.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
 
+    // --- Boutons existants (pas de selection) ---
     if (target.classList.contains('btn-open-pdf')) {
-      const p = target.dataset.path!;
-      await window.api.openPdf(p);
+      await window.api.openPdf(target.dataset.path!);
+      return;
     }
 
     if (target.classList.contains('btn-mark-sent')) {
       const id   = parseInt(target.dataset.id!, 10);
       const year = parseInt(target.dataset.year!, 10);
       await window.api.markSentToAccountant(id, year);
-      // Ajouter au panier comptable
       const inv = allInvoices.find(i => i.openedit_id === id && i.year === year);
       if (inv) addToBasket(inv);
       await loadInvoices();
+      return;
     }
 
+    // --- Selection de lignes ---
+    const tr = (e.target as HTMLElement).closest('tr[data-key]') as HTMLElement | null;
+    if (!tr) return;
+    const key = tr.dataset.key!;
+
+    if (e.shiftKey && lastClickedKey) {
+      // Selectionner la plage entre lastClickedKey et key
+      const iA = currentSortedKeys.indexOf(lastClickedKey);
+      const iB = currentSortedKeys.indexOf(key);
+      if (iA >= 0 && iB >= 0) {
+        const [lo, hi] = iA <= iB ? [iA, iB] : [iB, iA];
+        // Effacer la selection courante et selectionner la plage
+        selectedKeys = new Set(currentSortedKeys.slice(lo, hi + 1));
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      // Toggle
+      if (selectedKeys.has(key)) selectedKeys.delete(key);
+      else selectedKeys.add(key);
+      lastClickedKey = key;
+    } else {
+      // Clic simple : selectionner uniquement cette ligne
+      selectedKeys = new Set([key]);
+      lastClickedKey = key;
+    }
+
+    renderInvoices();
   });
 
   // Panier comptable
