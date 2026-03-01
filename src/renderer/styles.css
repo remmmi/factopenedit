@@ -619,3 +619,39 @@ details[open] .accordion-icon::after {
   justify-content: flex-end;
   flex-shrink: 0;
 }
+
+/* ============================================================
+   Ligne selectionnee
+   ============================================================ */
+tbody tr.row--selected td { background: #dbeafe; }
+tbody tr.row--selected:hover td { background: #bfdbfe; }
+
+/* ============================================================
+   Menu contextuel
+   ============================================================ */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 4px 0;
+  min-width: 220px;
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 14px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.context-menu__item:hover {
+  background: #eff6ff;
+  color: var(--accent);
+}
