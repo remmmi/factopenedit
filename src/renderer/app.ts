@@ -53,6 +53,11 @@ const zippedKeys = new Set<string>();
 let sortKey = 'openedit_id';
 let sortAsc = false;
 
+// Multi-selection
+let selectedKeys = new Set<string>(); // cles "year-id"
+let lastClickedKey: string | null = null;
+let currentSortedKeys: string[] = []; // ordre du rendu courant
+
 // Doit etre identique a YEAR_SWITCH_THRESHOLD dans url-generator.ts
 const YEAR_SWITCH_THRESHOLD = 3;
 
@@ -228,6 +233,8 @@ function renderInvoices(): void {
     return sortAsc ? res : -res;
   });
 
+  currentSortedKeys = sorted.map(inv => `${inv.year}-${inv.openedit_id}`);
+
   const neutralizedKeys = allNeutralizedKeys;
 
   // Mettre a jour les indicateurs de tri sur les en-tetes
@@ -244,6 +251,9 @@ function renderInvoices(): void {
 
   for (const inv of sorted) {
     const tr = document.createElement('tr');
+    const key = `${inv.year}-${inv.openedit_id}`;
+    tr.dataset.key = key;
+    if (selectedKeys.has(key)) tr.classList.add('row--selected');
     if (zippedKeys.has(`${inv.year}-${inv.openedit_id}`)) {
       tr.classList.add('row--zipped');
     }
