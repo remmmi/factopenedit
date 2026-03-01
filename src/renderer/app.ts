@@ -664,6 +664,21 @@ function addToBasket(inv: Invoice & { id: number }): void {
   }
 }
 
+async function bulkSendToAccountant(): Promise<void> {
+  if (selectedKeys.size === 0) return;
+  const toSend = allInvoices.filter(inv =>
+    selectedKeys.has(`${inv.year}-${inv.openedit_id}`)
+    && inv.status !== 'sent_to_accountant'
+  );
+  for (const inv of toSend) {
+    await window.api.markSentToAccountant(inv.openedit_id, inv.year);
+    addToBasket(inv);
+  }
+  selectedKeys.clear();
+  lastClickedKey = null;
+  await loadInvoices();
+}
+
 async function downloadBasketZip(): Promise<void> {
   const filePaths = cartItems
     .map(c => c.invoice.file_path)
@@ -701,10 +716,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Filtres
-  document.getElementById('filter-year')!.addEventListener('change', renderInvoices);
-  document.getElementById('filter-status')!.addEventListener('change', renderInvoices);
-  document.getElementById('filter-paid')!.addEventListener('change', renderInvoices);
-  document.getElementById('search-input')!.addEventListener('input', renderInvoices);
+  function applyFilters(): void {
+    selectedKeys.clear();
+    lastClickedKey = null;
+    renderInvoices();
+  }
+
+  document.getElementById('filter-year')!.addEventListener('change', applyFilters);
+  document.getElementById('filter-status')!.addEventListener('change', applyFilters);
+  document.getElementById('filter-paid')!.addEventListener('change', applyFilters);
+  document.getElementById('search-input')!.addEventListener('input', applyFilters);
   document.getElementById('btn-refresh')!.addEventListener('click', loadInvoices);
 
   // Tri des colonnes (delegation sur thead)
@@ -778,6 +799,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderInvoices();
   });
+
+  // Menu contextuel clic droit
+  const ctxMenu = document.getElementById('row-context-menu')!;
+  const ctxCount = document.getElementById('ctx-count')!;
+
+  function showContextMenu(x: number, y: number): void {
+    const sendable = allInvoices.filter(inv =>
+      selectedKeys.has(`${inv.year}-${inv.openedit_id}`)
+      && inv.status !== 'sent_to_accountant'
+    ).length;
+    ctxCount.textContent = String(sendable);
+    ctxMenu.style.left = `${x}px`;
+    ctxMenu.style.top  = `${y}px`;
+    ctxMenu.hidden = false;
+  }
+
+  function hideContextMenu(): void {
+    ctxMenu.hidden = true;
+  }
+
+  document.getElementById('invoices-body')!.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const tr = (e.target as HTMLElement).closest('tr[data-key]') as HTMLElement | null;
+    if (!tr) return;
+    const key = tr.dataset.key!;
+    if (!selectedKeys.has(key)) {
+      selectedKeys = new Set([key]);
+      lastClickedKey = key;
+      renderInvoices();
+    }
+    showContextMenu(e.clientX, e.clientY);
+  });
+
+  document.getElementById('ctx-send-accountant')!.addEventListener('click', () => {
+    hideContextMenu();
+    bulkSendToAccountant().catch(err => console.error('[bulk-send]', err));
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!ctxMenu.hidden && !ctxMenu.contains(e.target as Node)) hideContextMenu();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideContextMenu();
+      selectedKeys.clear();
+      lastClickedKey = null;
+      renderInvoices();
+    }
+  });
+
+  document.getElementById('invoices-body')!
+    .closest('.table-wrapper')!
+    .addEventListener('scroll', () => hideContextMenu(), { passive: true });
 
   // Panier comptable
   document.getElementById('basket-list')!.addEventListener('click', async (e) => {
