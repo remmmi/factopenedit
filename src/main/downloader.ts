@@ -18,6 +18,7 @@ export interface ScanOptions {
   delayMaxMs?: number;
   onProgress?: (p: ScanProgress) => void;
   onSave?: (invoice: Invoice) => void;  // Appele immediatement apres chaque PDF sauvegarde
+  existsInDb?: (seq: number, year: number) => boolean; // Verifie si la facture est deja en DB
   stopAfterConsecutiveMisses?: number; // Mode daily : arret apres N 404 consecutifs
   maxDownloads?: number;               // Mode initial : arret apres N factures telechargees
 }
@@ -86,7 +87,13 @@ async function downloadAndSave(
   invoices: Invoice[],
   onProgress?: (p: ScanProgress) => void,
   onSave?: (invoice: Invoice) => void,
+  existsInDb?: (seq: number, year: number) => boolean,
 ): Promise<void> {
+  if (existsInDb?.(seq, year)) {
+    console.log(`[skip] seq=${seq} year=${year} deja en DB`);
+    onProgress?.({ url, seq, year, status: 'skipped' });
+    return;
+  }
   onProgress?.({ url, seq, year, status: 'downloading' });
   try {
     const buffer   = await downloadPdf(url);
@@ -144,6 +151,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
     delayMs = REQUEST_DELAY_MS,
     onProgress,
     onSave,
+    existsInDb,
   } = opts;
 
   const invoices: Invoice[] = [];
@@ -168,7 +176,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
         if (exists) {
           currentYear = probeYear;
           upperFound  = true;
-          await downloadAndSave(url, segment.to, probeYear, downloadDir, tenantId, invoices, onProgress, onSave);
+          await downloadAndSave(url, segment.to, probeYear, downloadDir, tenantId, invoices, onProgress, onSave, existsInDb);
           if (opts.maxDownloads !== undefined && invoices.length >= opts.maxDownloads) {
             return invoices;
           }
@@ -197,7 +205,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
 
         if (exists) {
           consecutiveMisses = 0;
-          await downloadAndSave(url, seq, currentYear, downloadDir, tenantId, invoices, onProgress, onSave);
+          await downloadAndSave(url, seq, currentYear, downloadDir, tenantId, invoices, onProgress, onSave, existsInDb);
           if (opts.maxDownloads !== undefined && invoices.length >= opts.maxDownloads) {
             break;
           }
@@ -217,7 +225,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
             await sleep(randomDelay(delayMs, opts.delayMaxMs));
 
             if (retryExists) {
-              await downloadAndSave(retryUrl, seq, currentYear, downloadDir, tenantId, invoices, onProgress, onSave);
+              await downloadAndSave(retryUrl, seq, currentYear, downloadDir, tenantId, invoices, onProgress, onSave, existsInDb);
               if (opts.maxDownloads !== undefined && invoices.length >= opts.maxDownloads) {
                 break;
               }
@@ -240,7 +248,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
 
         if (exists) {
           consecutiveMisses = 0;
-          await downloadAndSave(url, seq, segment.year, downloadDir, tenantId, invoices, onProgress, onSave);
+          await downloadAndSave(url, seq, segment.year, downloadDir, tenantId, invoices, onProgress, onSave, existsInDb);
         } else {
           consecutiveMisses++;
           onProgress?.({ url, seq, year: segment.year, status: 'skipped' });

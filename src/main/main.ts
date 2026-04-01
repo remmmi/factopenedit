@@ -64,6 +64,34 @@ function initDatabase(): void {
   // Dossier de telechargement dans userData (portable entre mises a jour)
   DOWNLOAD_DIR = path.join(app.getPath('userData'), 'pdf_download');
   fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+
+  // Fallback : detecter le tenant_id depuis les noms de fichiers PDF existants
+  // Format attendu : "{tenant}-{year}-{seq}.pdf" ex: "79-2026-1110.pdf"
+  if (tenantId === null) {
+    const detected = detectTenantFromPdfs(DOWNLOAD_DIR);
+    if (detected !== null) {
+      tenantId = detected;
+      setSetting(db, 'tenant_id', String(detected));
+      console.log(`[init] tenant_id=${detected} detecte depuis les PDFs existants`);
+    }
+  }
+}
+
+function detectTenantFromPdfs(dir: string): number | null {
+  if (!fs.existsSync(dir)) return null;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      for (const file of fs.readdirSync(path.join(dir, entry.name))) {
+        const m = file.match(/^(\d+)-\d{4}-\d+\.pdf$/);
+        if (m) return parseInt(m[1], 10);
+      }
+    }
+    if (entry.isFile() && entry.name.endsWith('.pdf')) {
+      const m = entry.name.match(/^(\d+)-\d{4}-\d+\.pdf$/);
+      if (m) return parseInt(m[1], 10);
+    }
+  }
+  return null;
 }
 
 // Integre en DB les PDFs deja telecharges mais absents de la DB
@@ -340,6 +368,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle('scan:start', async (_event, tenantId_arg: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => {
     const tid = tenantId_arg || tenantId;
     if (!tid) throw new Error('tenant_id non configure — faites un premier telechargement');
+    if (tenantId !== tid) {
+      setSetting(db, 'tenant_id', String(tid));
+      tenantId = tid;
+    }
     const downloadDir = DOWNLOAD_DIR;
 
     const invoices = await scanSegments({
@@ -354,6 +386,7 @@ function registerIpcHandlers(): void {
           mainWindow.webContents.send('scan:progress', progress);
         }
       },
+      existsInDb: (seq, year) => !!getInvoice(db, seq, year),
       onSave: (invoice) => {
         try { insertInvoice(db, invoice); } catch { /* doublon */ }
       },
@@ -380,6 +413,7 @@ function registerIpcHandlers(): void {
       baseUrl:  BASE_URL,
       downloadDir: DOWNLOAD_DIR!,
       stopAfterConsecutiveMisses: 3,
+      existsInDb: (seq, year) => !!getInvoice(db, seq, year),
       onProgress: (progress) => {
         if (!mainWindow.isDestroyed()) {
           mainWindow.webContents.send('scan:progress', progress);
@@ -427,6 +461,7 @@ function registerIpcHandlers(): void {
         delayMs:     opts?.delayMs,
         delayMaxMs:  opts?.delayMaxMs,
         maxDownloads: count,
+        existsInDb: (seq, year) => !!getInvoice(db, seq, year),
         onProgress: (progress) => {
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('scan:progress', progress);

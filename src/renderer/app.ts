@@ -430,10 +430,14 @@ function waitForModalConfirm(): Promise<boolean> {
 }
 
 async function startScan(): Promise<void> {
-  if (tenantId === null) {
-    alert("Faites d'abord un telechargement initial pour configurer le tenant.");
+  const tenantInput = (document.getElementById('seg-tenant') as HTMLInputElement).value;
+  const scanTenantId = tenantInput ? parseInt(tenantInput, 10) : tenantId;
+  if (!scanTenantId || isNaN(scanTenantId)) {
+    alert("Renseignez le Tenant ID (ex: 79).");
     return;
   }
+  // Mettre a jour le tenant global + persister via le scan
+  tenantId = scanTenantId;
   const errEl = document.getElementById('scan-range-error')!;
   const seg = getSegment();
   if (!seg) {
@@ -443,7 +447,7 @@ async function startScan(): Promise<void> {
   errEl.style.display = 'none';
 
   // Etape 1 : recuperer le plan et montrer le modal de confirmation
-  const plan = await window.api.getScanPlan(tenantId, [seg]);
+  const plan = await window.api.getScanPlan(scanTenantId, [seg]);
   populateScanModal(plan);
   const confirmed = await waitForModalConfirm();
   if (!confirmed) return;
@@ -480,7 +484,7 @@ async function startScan(): Promise<void> {
   });
 
   try {
-    const count = await window.api.startScan(tenantId, [seg], delayOpts);
+    const count = await window.api.startScan(scanTenantId, [seg], delayOpts);
     addToScanBadge(count);
     resultText.textContent = `${count} facture${count > 1 ? 's' : ''} telechargee${count > 1 ? 's' : ''}`;
     resultSection.hidden = false;
@@ -927,7 +931,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init async
   refreshSession().catch(console.error);
   window.api.getAllSettings().then(settings => {
-    if (settings.tenant_id) tenantId = parseInt(settings.tenant_id, 10);
+    if (settings.tenant_id) {
+      tenantId = parseInt(settings.tenant_id, 10);
+      (document.getElementById('seg-tenant') as HTMLInputElement).value = settings.tenant_id;
+    }
   }).catch(console.error);
   loadInvoices().then(() => performDailyCheck()).catch(console.error);
 });
