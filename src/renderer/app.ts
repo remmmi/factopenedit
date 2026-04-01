@@ -1,4 +1,5 @@
 import './styles.css';
+import { YEAR_SWITCH_THRESHOLD } from '../shared/types';
 import type { Invoice, UrlSegment, ScanProgress, ScanPlanEntry } from '../shared/types';
 
 // window.api est expose par preload.ts via contextBridge
@@ -58,8 +59,7 @@ let selectedKeys = new Set<string>(); // cles "year-id"
 let lastClickedKey: string | null = null;
 let currentSortedKeys: string[] = []; // ordre du rendu courant
 
-// Doit etre identique a YEAR_SWITCH_THRESHOLD dans url-generator.ts
-const YEAR_SWITCH_THRESHOLD = 3;
+// YEAR_SWITCH_THRESHOLD importe depuis shared/types.ts
 
 // ---------------------------------------------------------------------------
 // Helpers formatage
@@ -489,7 +489,14 @@ async function startScan(): Promise<void> {
     resultText.textContent = `${count} facture${count > 1 ? 's' : ''} telechargee${count > 1 ? 's' : ''}`;
     resultSection.hidden = false;
     await loadInvoices();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    resultText.textContent = `Erreur : ${msg}`;
+    resultText.style.color = 'var(--red, #e74c3c)';
+    resultSection.hidden = false;
+    console.error('[scan:start]', err);
   } finally {
+    resultText.style.color = '';
     unsubscribe();
     btnScan.disabled = false;
     progressBar.style.width = '100%';
@@ -590,6 +597,16 @@ async function handleInitialPreview(): Promise<void> {
 
 async function performDailyCheck(): Promise<void> {
   if (allInvoices.length === 0) return;
+
+  // Verifier la session avant de lancer le scan
+  const sessionOk = await window.api.checkSession();
+  if (!sessionOk) {
+    const label = document.getElementById('session-label')!;
+    label.textContent = 'Session expiree';
+    label.classList.remove('connected');
+    console.warn('[daily] session expiree, scan annule');
+    return;
+  }
 
   const maxInvoice = allInvoices.reduce((a, b) =>
     a.openedit_id > b.openedit_id ? a : b
@@ -821,6 +838,15 @@ document.addEventListener('DOMContentLoaded', () => {
     ctxMenu.style.left = `${x}px`;
     ctxMenu.style.top  = `${y}px`;
     ctxMenu.hidden = false;
+
+    // Ajuster si le menu deborde du viewport
+    const rect = ctxMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      ctxMenu.style.left = `${Math.max(0, window.innerWidth - rect.width)}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      ctxMenu.style.top = `${Math.max(0, window.innerHeight - rect.height)}px`;
+    }
   }
 
   function hideContextMenu(): void {
@@ -881,9 +907,13 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadBasketZip().catch(err => console.error('[basket-zip]', err));
   });
 
-  document.getElementById('btn-basket-clear')!.addEventListener('click', () => {
+  document.getElementById('btn-basket-clear')!.addEventListener('click', async () => {
+    for (const item of cartItems) {
+      await window.api.unmarkSentToAccountant(item.invoice.openedit_id, item.invoice.year);
+    }
     cartItems = [];
     renderBasket();
+    await loadInvoices();
   });
 
   renderBasket();

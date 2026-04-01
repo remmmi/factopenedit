@@ -1,12 +1,10 @@
 // Generateur d'URLs de factures a partir de segments de plage
+import { YEAR_SWITCH_THRESHOLD } from '../shared/types';
 import type { UrlSegment, ScanPlanEntry } from '../shared/types';
 
-export const DEFAULT_BASE_URL = 'https://saisie.open-edit.io';
+export { YEAR_SWITCH_THRESHOLD };
 
-// Nombre de 404 consecutifs avant bascule d'annee (mode exploratoire).
-// Les seqs etant globalement croissants, un gap de 3 signifie qu'on a passe
-// la frontiere d'annee -- pas besoin d'attendre 30.
-export const YEAR_SWITCH_THRESHOLD = 3;
+export const DEFAULT_BASE_URL = 'https://saisie.open-edit.io';
 
 export function generateUrl(
   tenantId: number,

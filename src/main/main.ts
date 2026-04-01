@@ -27,6 +27,9 @@ if (require('electron-squirrel-startup')) app.quit();
 let db: Database.Database;
 let mainWindow: BrowserWindow;
 
+// Flag pour empecher les scans concurrents
+let scanInProgress = false;
+
 // ---------------------------------------------------------------------------
 // Fenetre principale
 // ---------------------------------------------------------------------------
@@ -59,7 +62,14 @@ function initDatabase(): void {
 
   // Lire le tenant_id stocke en DB
   const savedTenant = getSetting(db, 'tenant_id');
-  if (savedTenant) tenantId = parseInt(savedTenant, 10);
+  if (savedTenant) {
+    const parsed = parseInt(savedTenant, 10);
+    if (isNaN(parsed)) {
+      console.warn(`[init] tenant_id invalide en DB: "${savedTenant}", ignore`);
+    } else {
+      tenantId = parsed;
+    }
+  }
 
   // Dossier de telechargement dans userData (portable entre mises a jour)
   DOWNLOAD_DIR = path.join(app.getPath('userData'), 'pdf_download');
@@ -145,8 +155,8 @@ async function backfillFromPdfDir(dir: string): Promise<number> {
         client_city:        parsed.clientCity ?? undefined,
       });
       inserted++;
-    } catch {
-      // PDF illisible ou doublon concurrent, on ignore
+    } catch (err) {
+      console.error(`[backfill] PDF illisible ou doublon: ${filePath}`, err);
     }
   }
 
@@ -163,8 +173,8 @@ async function backfillClientFields(): Promise<void> {
       const parsed = await parsePdf(inv.file_path!);
       updateClientFields(db, inv.openedit_id, inv.year,
         parsed.clientName, parsed.clientContact, parsed.clientCity);
-    } catch {
-      // PDF illisible, on ignore
+    } catch (err) {
+      console.error(`[backfill-client] PDF illisible: ${inv.file_path}`, err);
     }
   }
 }
@@ -186,8 +196,8 @@ async function backfillAvoirFields(): Promise<void> {
       );
       // Stocker raw_text pour eviter de re-parser au prochain demarrage
       updateRawText(db, inv.openedit_id, inv.year, parsed.rawText);
-    } catch {
-      // PDF illisible, on ignore
+    } catch (err) {
+      console.error(`[backfill-avoir] PDF illisible: ${inv.file_path}`, err);
     }
   }
 }
@@ -366,65 +376,81 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('scan:start', async (_event, tenantId_arg: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => {
+    if (scanInProgress) throw new Error('Un scan est deja en cours');
     const tid = tenantId_arg || tenantId;
     if (!tid) throw new Error('tenant_id non configure — faites un premier telechargement');
+    scanInProgress = true;
     if (tenantId !== tid) {
       setSetting(db, 'tenant_id', String(tid));
       tenantId = tid;
     }
     const downloadDir = DOWNLOAD_DIR;
 
-    const invoices = await scanSegments({
-      tenantId: tid,
-      segments,
-      baseUrl: BASE_URL,
-      downloadDir,
-      delayMs:    opts?.delayMs,
-      delayMaxMs: opts?.delayMaxMs,
-      onProgress: (progress) => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('scan:progress', progress);
-        }
-      },
-      existsInDb: (seq, year) => !!getInvoice(db, seq, year),
-      onSave: (invoice) => {
-        try { insertInvoice(db, invoice); } catch { /* doublon */ }
-      },
-    });
+    try {
+      const invoices = await scanSegments({
+        tenantId: tid,
+        segments,
+        baseUrl: BASE_URL,
+        downloadDir,
+        delayMs:    opts?.delayMs,
+        delayMaxMs: opts?.delayMaxMs,
+        onProgress: (progress) => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan:progress', progress);
+          }
+        },
+        existsInDb: (seq, year) => !!getInvoice(db, seq, year),
+        onSave: (invoice) => {
+          try { insertInvoice(db, invoice); } catch (err) { console.error('[scan:start] insert doublon:', err); }
+        },
+      });
 
-    return invoices.length;
+      return invoices.length;
+    } finally {
+      scanInProgress = false;
+    }
   });
 
   ipcMain.handle('scan:daily', async (_event, maxSeq: number, maxYear: number) => {
+    if (scanInProgress) throw new Error('Un scan est deja en cours');
     if (tenantId === null) throw new Error('tenant_id non configure — faites un premier telechargement');
+    scanInProgress = true;
     const currentYear = new Date().getFullYear();
-    const startYear   = Math.max(maxYear, currentYear);
     // Borne haute : 50 seq de buffer, stopAfterConsecutiveMisses coupe avant
     const TO_BUFFER = 50;
-    const segment: UrlSegment = {
-      year:  startYear,
-      from:  maxSeq + 1,
-      to:    maxSeq + TO_BUFFER,
-    };
 
-    const invoices = await scanSegments({
-      tenantId: tenantId,
-      segments: [segment],
-      baseUrl:  BASE_URL,
-      downloadDir: DOWNLOAD_DIR!,
-      stopAfterConsecutiveMisses: 3,
-      existsInDb: (seq, year) => !!getInvoice(db, seq, year),
-      onProgress: (progress) => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('scan:progress', progress);
-        }
-      },
-      onSave: (invoice) => {
-        try { insertInvoice(db, invoice); } catch { /* doublon */ }
-      },
-    });
+    // Si maxYear < currentYear, scanner les deux annees (les premieres factures
+    // de l'annee N+1 peuvent encore etre dans le path URL de l'annee N)
+    const segments: UrlSegment[] = [];
+    if (maxYear < currentYear) {
+      segments.push({ year: maxYear, from: maxSeq + 1, to: maxSeq + TO_BUFFER });
+      segments.push({ year: currentYear, from: maxSeq + 1, to: maxSeq + TO_BUFFER });
+    } else {
+      segments.push({ year: Math.max(maxYear, currentYear), from: maxSeq + 1, to: maxSeq + TO_BUFFER });
+    }
 
-    return invoices.length;
+    try {
+      const invoices = await scanSegments({
+        tenantId: tenantId,
+        segments,
+        baseUrl:  BASE_URL,
+        downloadDir: DOWNLOAD_DIR!,
+        stopAfterConsecutiveMisses: 3,
+        existsInDb: (seq, year) => !!getInvoice(db, seq, year),
+        onProgress: (progress) => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan:progress', progress);
+          }
+        },
+        onSave: (invoice) => {
+          try { insertInvoice(db, invoice); } catch (err) { console.error('[scan:daily] insert doublon:', err); }
+        },
+      });
+
+      return invoices.length;
+    } finally {
+      scanInProgress = false;
+    }
   });
 
   ipcMain.handle('scan:initial',
@@ -435,6 +461,8 @@ function registerIpcHandlers(): void {
            count: number,
            opts?: { delayMs?: number; delayMaxMs?: number }
     ) => {
+      if (scanInProgress) throw new Error('Un scan est deja en cours');
+      scanInProgress = true;
       // Stocker en DB si nouveau ou different
       if (tenantId !== tenantId_arg) {
         setSetting(db, 'tenant_id', String(tenantId_arg));
@@ -453,26 +481,30 @@ function registerIpcHandlers(): void {
         candidateYears,
       };
 
-      const invoices = await scanSegments({
-        tenantId:    tenantId,
-        segments:    [segment],
-        baseUrl:     BASE_URL,
-        downloadDir: DOWNLOAD_DIR!,
-        delayMs:     opts?.delayMs,
-        delayMaxMs:  opts?.delayMaxMs,
-        maxDownloads: count,
-        existsInDb: (seq, year) => !!getInvoice(db, seq, year),
-        onProgress: (progress) => {
-          if (!mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('scan:progress', progress);
-          }
-        },
-        onSave: (invoice) => {
-          try { insertInvoice(db, invoice); } catch { /* doublon */ }
-        },
-      });
+      try {
+        const invoices = await scanSegments({
+          tenantId:    tenantId,
+          segments:    [segment],
+          baseUrl:     BASE_URL,
+          downloadDir: DOWNLOAD_DIR!,
+          delayMs:     opts?.delayMs,
+          delayMaxMs:  opts?.delayMaxMs,
+          maxDownloads: count,
+          existsInDb: (seq, year) => !!getInvoice(db, seq, year),
+          onProgress: (progress) => {
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('scan:progress', progress);
+            }
+          },
+          onSave: (invoice) => {
+            try { insertInvoice(db, invoice); } catch (err) { console.error('[scan:initial] insert doublon:', err); }
+          },
+        });
 
-      return invoices.length;
+        return invoices.length;
+      } finally {
+        scanInProgress = false;
+      }
     }
   );
 }
@@ -485,18 +517,20 @@ app.on('ready', () => {
   initDatabase();
   registerIpcHandlers();
   createWindow();
-  // Backfill silencieux apres ouverture de fenetre
-  // 1. Integre les PDFs existants non encore en DB (scan interrompu, ancien dossier)
-  const oldPdfDir = path.join(app.getAppPath(), 'pdf_download');
-  backfillFromPdfDir(oldPdfDir)
-    .then(n => { if (n > 0) console.log(`[backfill] ${n} factures integrees depuis ${oldPdfDir}`); })
-    .catch(() => {});
-  backfillFromPdfDir(DOWNLOAD_DIR)
-    .then(n => { if (n > 0) console.log(`[backfill] ${n} factures integrees depuis ${DOWNLOAD_DIR}`); })
-    .catch(() => {});
-  // 2. Migrations champs client et avoirs
-  backfillClientFields().catch(() => {});
-  backfillAvoirFields().catch(() => {});
+  // Backfill silencieux apres ouverture de fenetre -- sequence ordonnee pour eviter les race conditions
+  (async () => {
+    try {
+      const oldPdfDir = path.join(app.getAppPath(), 'pdf_download');
+      const n1 = await backfillFromPdfDir(oldPdfDir);
+      if (n1 > 0) console.log(`[backfill] ${n1} factures integrees depuis ${oldPdfDir}`);
+      const n2 = await backfillFromPdfDir(DOWNLOAD_DIR);
+      if (n2 > 0) console.log(`[backfill] ${n2} factures integrees depuis ${DOWNLOAD_DIR}`);
+      await backfillClientFields();
+      await backfillAvoirFields();
+    } catch (err) {
+      console.error('[backfill] erreur durant le backfill au demarrage:', err);
+    }
+  })();
 });
 
 app.on('window-all-closed', () => {

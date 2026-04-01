@@ -23,14 +23,24 @@ export interface ScanOptions {
   maxDownloads?: number;               // Mode initial : arret apres N factures telechargees
 }
 
+const HEAD_TIMEOUT_MS = 15000;
+const GET_TIMEOUT_MS  = 30000;
+
 function checkUrl(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = net.request({ method: 'HEAD', url, useSessionCookies: true });
+    const timer = setTimeout(() => {
+      req.abort();
+      console.error(`[HEAD] timeout ${url}`);
+      resolve(false);
+    }, HEAD_TIMEOUT_MS);
     req.on('response', (res) => {
+      clearTimeout(timer);
       console.log(`[HEAD] ${res.statusCode} ${url}`);
       resolve(res.statusCode === 200);
     });
     req.on('error', (err) => {
+      clearTimeout(timer);
       console.error(`[HEAD] error ${url}:`, err.message);
       resolve(false);
     });
@@ -41,18 +51,24 @@ function checkUrl(url: string): Promise<boolean> {
 function downloadPdf(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const req = net.request({ method: 'GET', url, useSessionCookies: true });
+    const timer = setTimeout(() => {
+      req.abort();
+      reject(new Error(`Timeout apres ${GET_TIMEOUT_MS / 1000}s pour ${url}`));
+    }, GET_TIMEOUT_MS);
     req.on('response', (res) => {
       console.log(`[GET] ${res.statusCode} ${url}`);
       if (res.statusCode !== 200) {
+        clearTimeout(timer);
         reject(new Error(`HTTP ${res.statusCode} pour ${url}`));
         return;
       }
       const chunks: Buffer[] = [];
       res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
+      res.on('end', () => { clearTimeout(timer); resolve(Buffer.concat(chunks)); });
+      res.on('error', (err) => { clearTimeout(timer); reject(err); });
     });
     req.on('error', (err) => {
+      clearTimeout(timer);
       console.error(`[GET] error ${url}:`, err.message);
       reject(err);
     });
@@ -157,6 +173,13 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
   const invoices: Invoice[] = [];
 
   for (const segment of segments) {
+    if (segment.year === 0 && !segment.candidateYears?.length) {
+      // candidateYears vide ou absent en mode exploratoire : impossible de scanner
+      onProgress?.({ url: '', seq: segment.from, year: 0, status: 'error',
+        error: 'Mode exploratoire sans candidateYears -- segment ignore' });
+      continue;
+    }
+
     if (segment.year === 0 && segment.candidateYears && segment.candidateYears.length > 0) {
 
       const yearsDesc = [...segment.candidateYears].sort((a, b) => b - a);

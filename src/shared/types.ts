@@ -1,4 +1,7 @@
-// Types partages entre main et renderer process
+// Types et constantes partages entre main et renderer process
+
+// Nombre de 404 consecutifs avant bascule d'annee (mode exploratoire).
+export const YEAR_SWITCH_THRESHOLD = 3;
 
 export interface UrlSegment {
   year: number;              // 0 = mode exploratoire (utiliser candidateYears)
