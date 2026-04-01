@@ -105,11 +105,11 @@ async function refreshSession(): Promise<void> {
 
   const ok = await window.api.checkSession();
   if (ok) {
-    label.textContent = 'Connecte';
+    label.textContent = 'Connect\u00e9';
     label.classList.add('connected');
     btn.textContent = 'Reconnexion';
   } else {
-    label.textContent = 'Non connecte';
+    label.textContent = 'Non connect\u00e9';
     label.classList.remove('connected');
     btn.textContent = 'Se connecter';
   }
@@ -355,7 +355,16 @@ function computeCandidateYears(fromYear?: number): number[] {
 function getSegment(): UrlSegment | null {
   const from = parseInt((document.getElementById('seg-from') as HTMLInputElement).value, 10);
   const to   = parseInt((document.getElementById('seg-to') as HTMLInputElement).value, 10);
-  if (isNaN(from) || isNaN(to) || from < 1 || to < from) return null;
+  const errEl = document.getElementById('scan-range-error')!;
+  if (isNaN(from) || isNaN(to) || from < 1) {
+    errEl.textContent = 'Numeros invalides (debut >= 1).';
+    return null;
+  }
+  if (to < from) {
+    errEl.textContent = 'Le numero de fin doit etre superieur ou egal au numero de debut.';
+    return null;
+  }
+  errEl.textContent = 'Numeros invalides (debut >= 1, fin >= debut).';
   return { year: 0, from, to, candidateYears: computeCandidateYears() };
 }
 
@@ -497,7 +506,6 @@ async function startScan(): Promise<void> {
     resultSection.hidden = false;
     console.error('[scan:start]', err);
   } finally {
-    resultText.style.color = '';
     unsubscribe();
     btnScan.disabled = false;
     progressBar.style.width = '100%';
@@ -603,7 +611,7 @@ async function performDailyCheck(): Promise<void> {
   const sessionOk = await window.api.checkSession();
   if (!sessionOk) {
     const label = document.getElementById('session-label')!;
-    label.textContent = 'Session expiree';
+    label.textContent = 'Session expir\u00e9e';
     label.classList.remove('connected');
     console.warn('[daily] session expiree, scan annule');
     return;
@@ -613,34 +621,30 @@ async function performDailyCheck(): Promise<void> {
     a.openedit_id > b.openedit_id ? a : b
   );
 
-  const progressSection = document.getElementById('auto-scan-progress')!;
-  const progressText    = document.getElementById('auto-progress-text')!;
-  const resultSection   = document.getElementById('auto-scan-result')!;
-  const resultText      = document.getElementById('auto-result-text')!;
+  const indicator     = document.getElementById('daily-scan-indicator')!;
+  const resultSection = document.getElementById('auto-scan-result')!;
+  const resultText    = document.getElementById('auto-result-text')!;
 
-  progressSection.hidden = false;
-  resultSection.hidden   = true;
-  progressText.textContent = 'Verification nouvelles factures...';
+  indicator.hidden = false;
+  resultSection.hidden = true;
 
-  const unsubscribe = window.api.onScanProgress((p: ScanProgress) => {
-    if (p.status === 'checking') {
-      progressText.textContent = `daily check : ${p.seq}/${p.year}`;
-    }
-  });
+  const unsubscribe = window.api.onScanProgress(() => {});
 
   try {
     const count = await window.api.scanDaily(maxInvoice.openedit_id, maxInvoice.year);
+    indicator.hidden = true;
+    unsubscribe();
     if (count > 0) {
       addToScanBadge(count);
       resultText.textContent = `${count} nouvelle${count > 1 ? 's' : ''} facture${count > 1 ? 's' : ''}`;
       resultSection.hidden = false;
       await loadInvoices();
-    } else {
-      progressText.textContent = 'Aucune nouvelle facture.';
     }
+  } catch (err) {
+    console.error('[daily]', err);
   } finally {
     unsubscribe();
-    progressSection.hidden = true;
+    indicator.hidden = true;
   }
 }
 

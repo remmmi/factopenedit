@@ -10,7 +10,11 @@
     <header id="header">
       <h1>fact_openedit</h1>
       <div id="session-status">
-        <span id="session-label">Non connecte</span>
+        <span id="session-label">Non connect&eacute;</span>
+        <span id="daily-scan-indicator" class="daily-scan-banner" hidden>
+          <span class="daily-scan-spinner"></span>
+          <span>Scan quotidien en cours</span>
+        </span>
         <button id="btn-login" class="btn-primary">Se connecter</button>
       </div>
     </header>
@@ -123,10 +127,7 @@
 
             <div class="section-divider"></div>
 
-            <!-- Mode 2 : daily check status -->
-            <div id="auto-scan-progress" hidden>
-              <p id="auto-progress-text" class="meta-text"></p>
-            </div>
+            <!-- Mode 2 : daily check status (resultat seulement) -->
             <div id="auto-scan-result" hidden>
               <p id="auto-result-text" class="meta-text msg-ok"></p>
             </div>
