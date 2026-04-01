@@ -1,7 +1,7 @@
 {
   "name": "fact-openedit",
   "productName": "fact_openedit",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "Facturation OpenEdit",
   "main": ".webpack/main",
   "private": true,
