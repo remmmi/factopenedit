@@ -29,6 +29,9 @@ let mainWindow: BrowserWindow;
 
 // Flag pour empecher les scans concurrents
 let scanInProgress = false;
+// Signal d'annulation du scan en cours
+import type { ScanAbortSignal } from './downloader';
+let currentScanSignal: ScanAbortSignal | null = null;
 
 // ---------------------------------------------------------------------------
 // Fenetre principale
@@ -380,6 +383,7 @@ function registerIpcHandlers(): void {
     const tid = tenantId_arg || tenantId;
     if (!tid) throw new Error('tenant_id non configure — faites un premier telechargement');
     scanInProgress = true;
+    currentScanSignal = { aborted: false };
     if (tenantId !== tid) {
       setSetting(db, 'tenant_id', String(tid));
       tenantId = tid;
@@ -394,6 +398,7 @@ function registerIpcHandlers(): void {
         downloadDir,
         delayMs:    opts?.delayMs,
         delayMaxMs: opts?.delayMaxMs,
+        signal: currentScanSignal,
         onProgress: (progress) => {
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('scan:progress', progress);
@@ -408,6 +413,7 @@ function registerIpcHandlers(): void {
       return invoices.length;
     } finally {
       scanInProgress = false;
+      currentScanSignal = null;
     }
   });
 
@@ -415,6 +421,7 @@ function registerIpcHandlers(): void {
     if (scanInProgress) throw new Error('Un scan est deja en cours');
     if (tenantId === null) throw new Error('tenant_id non configure — faites un premier telechargement');
     scanInProgress = true;
+    currentScanSignal = { aborted: false };
     const currentYear = new Date().getFullYear();
     // Borne haute : 50 seq de buffer, stopAfterConsecutiveMisses coupe avant
     const TO_BUFFER = 50;
@@ -436,6 +443,7 @@ function registerIpcHandlers(): void {
         baseUrl:  BASE_URL,
         downloadDir: DOWNLOAD_DIR!,
         stopAfterConsecutiveMisses: 3,
+        signal: currentScanSignal,
         existsInDb: (seq, year) => !!getInvoice(db, seq, year),
         onProgress: (progress) => {
           if (!mainWindow.isDestroyed()) {
@@ -450,6 +458,7 @@ function registerIpcHandlers(): void {
       return invoices.length;
     } finally {
       scanInProgress = false;
+      currentScanSignal = null;
     }
   });
 
@@ -463,6 +472,7 @@ function registerIpcHandlers(): void {
     ) => {
       if (scanInProgress) throw new Error('Un scan est deja en cours');
       scanInProgress = true;
+      currentScanSignal = { aborted: false };
       // Stocker en DB si nouveau ou different
       if (tenantId !== tenantId_arg) {
         setSetting(db, 'tenant_id', String(tenantId_arg));
@@ -490,6 +500,7 @@ function registerIpcHandlers(): void {
           delayMs:     opts?.delayMs,
           delayMaxMs:  opts?.delayMaxMs,
           maxDownloads: count,
+          signal: currentScanSignal,
           existsInDb: (seq, year) => !!getInvoice(db, seq, year),
           onProgress: (progress) => {
             if (!mainWindow.isDestroyed()) {
@@ -504,9 +515,20 @@ function registerIpcHandlers(): void {
         return invoices.length;
       } finally {
         scanInProgress = false;
+        currentScanSignal = null;
       }
     }
   );
+
+  // -- Stop scan ---------------------------------------------------------------
+
+  ipcMain.handle('scan:stop', () => {
+    if (currentScanSignal) {
+      currentScanSignal.aborted = true;
+      console.log('[scan] arret demande par l\'utilisateur');
+    }
+    return { success: true };
+  });
 }
 
 // ---------------------------------------------------------------------------

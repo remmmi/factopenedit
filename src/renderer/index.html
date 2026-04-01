@@ -108,8 +108,11 @@
             <p id="scan-range-error" class="meta-text" style="color:var(--red);display:none">Numeros invalides (debut >= 1, fin >= debut).</p>
 
             <div id="scan-progress" hidden>
-              <div class="progress-bar-wrap">
-                <div id="progress-bar" class="progress-bar"></div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="progress-bar-wrap" style="flex:1">
+                  <div id="progress-bar" class="progress-bar"></div>
+                </div>
+                <button id="btn-stop-scan" class="btn-action" title="Arreter le scan" style="min-width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px">&#9632;</button>
               </div>
               <p id="progress-text" class="meta-text"></p>
               <p id="progress-url" class="url-mono"></p>

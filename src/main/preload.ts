@@ -56,6 +56,9 @@ const api = {
   ): Promise<number> =>
     ipcRenderer.invoke('scan:start', tenantId, segments, opts),
 
+  stopScan: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('scan:stop'),
+
   scanDaily: (maxSeq: number, maxYear: number): Promise<number> =>
     ipcRenderer.invoke('scan:daily', maxSeq, maxYear),
 

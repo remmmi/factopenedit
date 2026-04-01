@@ -9,6 +9,10 @@ import type { UrlSegment, Invoice, ScanProgress } from '../shared/types';
 // Delai entre deux requetes pour ne pas se faire rate-limiter (ms)
 const REQUEST_DELAY_MS = 300;
 
+export interface ScanAbortSignal {
+  aborted: boolean;
+}
+
 export interface ScanOptions {
   downloadDir: string;
   tenantId: number;
@@ -21,6 +25,7 @@ export interface ScanOptions {
   existsInDb?: (seq: number, year: number) => boolean; // Verifie si la facture est deja en DB
   stopAfterConsecutiveMisses?: number; // Mode daily : arret apres N 404 consecutifs
   maxDownloads?: number;               // Mode initial : arret apres N factures telechargees
+  signal?: ScanAbortSignal;            // Signal d'annulation
 }
 
 const HEAD_TIMEOUT_MS = 15000;
@@ -171,8 +176,11 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
   } = opts;
 
   const invoices: Invoice[] = [];
+  const signal = opts.signal;
 
   for (const segment of segments) {
+    if (signal?.aborted) break;
+
     if (segment.year === 0 && !segment.candidateYears?.length) {
       // candidateYears vide ou absent en mode exploratoire : impossible de scanner
       onProgress?.({ url: '', seq: segment.from, year: 0, status: 'error',
@@ -191,6 +199,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
       // ---------------------------------------------------------------
       let upperFound = false;
       for (const probeYear of yearsDesc) {
+        if (signal?.aborted) break;
         const url = generateUrl(tenantId, probeYear, segment.to, baseUrl);
         onProgress?.({ url, seq: segment.to, year: probeYear, status: 'probing' });
         const exists = await checkUrl(url);
@@ -222,6 +231,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
       let consecutiveMisses = 0;
 
       for (let seq = segment.to - 1; seq >= segment.from; seq--) {
+        if (signal?.aborted) break;
         const url = generateUrl(tenantId, currentYear, seq, baseUrl);
         onProgress?.({ url, seq, year: currentYear, status: 'checking' });
         const exists = await checkUrl(url);
@@ -265,6 +275,7 @@ export async function scanSegments(opts: ScanOptions): Promise<Invoice[]> {
       // Mode normal : boucle ASC, annee fixe
       let consecutiveMisses = 0;
       for (let seq = segment.from; seq <= segment.to; seq++) {
+        if (signal?.aborted) break;
         const url = generateUrl(tenantId, segment.year, seq, baseUrl);
         onProgress?.({ url, seq, year: segment.year, status: 'checking' });
         const exists = await checkUrl(url);

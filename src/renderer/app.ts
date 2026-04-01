@@ -16,6 +16,7 @@ declare global {
       setSetting: (key: string, value: string) => Promise<{ success: boolean }>;
       getScanPlan: (tenantId: number, segments: UrlSegment[]) => Promise<ScanPlanEntry[]>;
       startScan: (tenantId: number, segments: UrlSegment[], opts?: { delayMs?: number; delayMaxMs?: number }) => Promise<number>;
+      stopScan: () => Promise<{ success: boolean }>;
       scanDaily: (maxSeq: number, maxYear: number) => Promise<number>;
       scanInitial: (
         tenantId: number,
@@ -766,6 +767,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Scan manuel (mode 3)
   document.getElementById('btn-scan')!.addEventListener('click', () => {
     startScan().catch(err => console.error('[scan:start]', err));
+  });
+
+  // Bouton stop scan
+  document.getElementById('btn-stop-scan')!.addEventListener('click', () => {
+    window.api.stopScan().catch(err => console.error('[scan:stop]', err));
   });
 
   // Mode 1 : initial download
